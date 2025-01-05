@@ -6,7 +6,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>latest</LangVersion>
     <PackageId>YB.ParseLiveQueryDotNet</PackageId>
-    <Version>3.0.1</Version>
+    <!--<Version>3.0.1</Version>-->
     <Authors>Yvan Brunel</Authors>
     <Company>Me</Company>
     <Description>A Modern .NET library for Parse Live Query. Compatible With .NET MAUI for Windows, Android, MacOS, iOS too, Now Smart Watches ;)</Description>
