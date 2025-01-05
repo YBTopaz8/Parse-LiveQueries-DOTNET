@@ -214,7 +214,7 @@ public class ParseLiveQueryClient
     private void SendSubscription(Subscription subscription)
     {
         _taskQueue.EnqueueOnError(
-            SendOperationWithSessionAsync(subscription.CreateSubscribeClientOperation),
+            SendOperationWithSessionAsync(session => subscription.CreateSubscribeClientOperation(session ?? string.Empty)),
             error => subscription.DidEncounter(subscription.QueryObj, new LiveQueryException.UnknownException("Error when subscribing", error))
         );
     }
@@ -229,11 +229,14 @@ public class ParseLiveQueryClient
     private Task SendOperationWithSessionAsync(Func<string, IClientOperation> operationFunc)
     {
         return _taskQueue.EnqueueOnSuccess(
+       ParseClient.Instance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClient.Instance.Services, CancellationToken.None),
 
-            ParseClient.Instance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClient.Instance.Services, CancellationToken.None),
-
-            currentSessionTokenTask => SendOperationAsync(operationFunc(currentSessionTokenTask.Result))
-        );
+       currentSessionTokenTask =>
+       {
+           var sessionToken = currentSessionTokenTask?.Result; // Can be null if no session
+           return SendOperationAsync(operationFunc(sessionToken));
+       }
+   );
     }
 
     private Task SendOperationAsync(IClientOperation operation)
@@ -540,7 +543,7 @@ public interface IWebSocketClientCallback
 
 
 
-public static class ObjectHelper 
+public static class ObjectMapper 
 {
     /// <summary>
     /// Maps values from a dictionary to an instance of type T.

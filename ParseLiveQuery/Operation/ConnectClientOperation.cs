@@ -16,11 +16,21 @@ public class ConnectClientOperation : SessionClientOperation {
     }
 
 
-    protected override IDictionary<string, object> ToJsonObject() => new Dictionary<string, object> {
-        ["op"] = "connect",
-        ["applicationId"] = _applicationId,
-        ["clientKey"] = _clientKey,
-        ["sessionToken"] = _sessionToken
-    };
+    protected override IDictionary<string, object> ToJsonObject()
+    {
+        var payload = new Dictionary<string, object>
+        {
+            ["op"] = "connect",
+            ["applicationId"] = _applicationId,
+            ["clientKey"] = _clientKey
+        };
+
+        if (!string.IsNullOrEmpty(_sessionToken))
+        {
+            payload["sessionToken"] = _sessionToken;
+        }
+
+        return payload;
+    }
 
 }
