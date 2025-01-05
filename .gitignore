@@ -41,3 +41,15 @@ Thumbs.db
 
 # dotCover
 *.dotCover
+/ParseLiveQuery/.vs/ParseLiveQuery/CopilotIndices/17.12.38.29086/CodeChunks.db
+/ParseLiveQuery/.vs/ParseLiveQuery/CopilotIndices/17.12.38.29086/SemanticSymbols.db
+/ParseLiveQuery/.vs/ParseLiveQuery/CopilotIndices/17.12.38.29086/SemanticSymbols.db-shm
+/ParseLiveQuery/.vs/ParseLiveQuery/CopilotIndices/17.12.38.29086/SemanticSymbols.db-wal
+/ParseLiveQuery/.vs/ParseLiveQuery/DesignTimeBuild/.dtbcache.v2
+/ParseLiveQuery/.vs/ParseLiveQuery/FileContentIndex/f03d1f20-08e7-4d78-8071-4ddda03fe7c9.vsidx
+/ParseLiveQuery/.vs/ParseLiveQuery/v17/.futdcache.v2
+/ParseLiveQuery/.vs/ParseLiveQuery/v17/DocumentLayout.json
+/ParseLiveQuery/.vs/ProjectEvaluation/parselivequery.metadata.v9.bin
+/ParseLiveQuery/.vs/ProjectEvaluation/parselivequery.projects.v9.bin
+/ParseLiveQuery/.vs/ProjectEvaluation/parselivequery.strings.v9.bin
+/ParseLiveQuery/nuget.config
