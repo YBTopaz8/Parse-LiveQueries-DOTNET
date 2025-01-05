@@ -1,592 +1,775 @@
-﻿
-using System.Reactive.Linq;      
-using System.Reactive.Subjects;    
-
-using Parse.Abstractions.Platform.Objects;
-using Parse.Infrastructure.Utilities;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Text.Json;
+using Parse.Abstractions.Platform.Objects;
+using Parse.Infrastructure.Utilities;
 using System.Diagnostics;
+using YB.Parse.LiveQuery;
+using System.IO;
+using System.Reflection;
+using System.Linq;
+using System.Collections;
 
-namespace Parse.LiveQuery
+namespace Parse.LiveQuery;
+public class ParseLiveQueryClient
 {
-    public class ParseLiveQueryClient
+    private readonly Uri _hostUri;
+    private readonly string _applicationId;
+    private readonly string _clientKey;
+    private readonly WebSocketClientFactory _webSocketClientFactory;
+    private readonly ITaskQueue _taskQueue;
+    private readonly ISubscriptionFactory _subscriptionFactory;
+
+    private IWebSocketClient _webSocketClient;
+    private int _requestIdCount = 1;
+    private bool _userInitiatedDisconnect;
+    private bool _hasReceivedConnected;
+
+    // Use ConcurrentDictionary for thread-safe operations on subscriptions
+    private readonly ConcurrentDictionary<int, Subscription> _subscriptions = new();
+
+    // Use Subjects for all event handling in Rx
+    private readonly Subject<ParseLiveQueryClient> _connectedSubject = new();
+    private readonly Subject<(ParseLiveQueryClient client, bool userInitiated)> _disconnectedSubject = new();
+    private readonly Subject<LiveQueryException> _errorSubject = new();
+    private readonly Subject<(int requestId, Subscription subscription)> _subscribedSubject = new();
+    private readonly Subject<(int requestId, Subscription subscription)> _unsubscribedSubject = new();
+    private readonly Subject<(Subscription.Event evt, object objectData, Subscription subscription)> _objectEventSubject = new();
+
+    // Expose IObservables for consumption
+    public IObservable<ParseLiveQueryClient> OnConnected => _connectedSubject.AsObservable();
+    public IObservable<(ParseLiveQueryClient client, bool userInitiated)> OnDisconnected => _disconnectedSubject.AsObservable();
+    public IObservable<LiveQueryException> OnError => _errorSubject.AsObservable();
+    public IObservable<(int requestId, Subscription subscription)> OnSubscribed => _subscribedSubject.AsObservable();
+    public IObservable<(int requestId, Subscription subscription)> OnUnsubscribed => _unsubscribedSubject.AsObservable();
+    public IObservable<(Subscription.Event evt, object objectData, Subscription subscription)> OnObjectEvent => _objectEventSubject.AsObservable();
+
+    public ParseLiveQueryClient() : this(GetDefaultUri()) { }
+    public ParseLiveQueryClient(Uri hostUri) : this(hostUri, WebSocketClient.Factory) { }
+    public ParseLiveQueryClient(WebSocketClientFactory webSocketClientFactory) : this(GetDefaultUri(), webSocketClientFactory) { }
+    public ParseLiveQueryClient(Uri hostUri, WebSocketClientFactory webSocketClientFactory) :
+        this(hostUri, webSocketClientFactory, new SubscriptionFactory(), new TaskQueueWrapper())
+    { }
+
+    internal ParseLiveQueryClient(Uri hostUri, WebSocketClientFactory webSocketClientFactory,
+        ISubscriptionFactory subscriptionFactory, ITaskQueue taskQueue)
     {
-        private readonly Uri _hostUri;
-        private readonly string _applicationId;
-        private readonly string _clientKey;
-        private readonly WebSocketClientFactory _webSocketClientFactory;
-        private readonly IWebSocketClientCallback _webSocketClientCallback;
-        private readonly ISubscriptionFactory _subscriptionFactory;
-        private readonly ITaskQueue _taskQueue;
+        _hostUri = hostUri;
+        _applicationId = ParseClient.Instance.ServerConnectionData.ApplicationID;
+        _clientKey = ParseClient.Instance.ServerConnectionData.Key;
 
-        private readonly ConcurrentDictionary<int, Subscription> _subscriptions = new ConcurrentDictionary<int, Subscription>();
+        _webSocketClientFactory = webSocketClientFactory;
+        _subscriptionFactory = subscriptionFactory;
+        _taskQueue = taskQueue;
+    }
 
-        private IWebSocketClient _webSocketClient;
-        private int _requestIdCount = 1;
-        private bool _userInitiatedDisconnect;
-        private bool _hasReceivedConnected;
+    private static Uri GetDefaultUri()
+    {
+        string server = ParseClient.Instance.ServerConnectionData.ServerURI;
+        if (server == null)
+            throw new InvalidOperationException("Missing default Server URI in CurrentConfiguration");
 
-        private readonly Subject<ParseLiveQueryClient> _connectedSubject = new Subject<ParseLiveQueryClient>();               // ADDED
-        private readonly Subject<(ParseLiveQueryClient client, bool userInitiated)> _disconnectedSubject = new Subject<(ParseLiveQueryClient, bool)>(); // ADDED
-        private readonly Subject<LiveQueryException> _errorSubject = new Subject<LiveQueryException>();                       // ADDED
-        private readonly Subject<(int requestId, Subscription subscription)> _subscribedSubject = new Subject<(int, Subscription)>();       // ADDED
-        private readonly Subject<(int requestId, Subscription subscription)> _unsubscribedSubject = new Subject<(int, Subscription)>();     // ADDED
-        private readonly Subject<(Subscription.Event evt, object objectDictionnary, Subscription subscription)> _objectEventSubject = new Subject<(Subscription.Event, object, Subscription)>(); // ADDED
-
-        public IObservable<ParseLiveQueryClient> OnConnected => _connectedSubject.AsObservable();                          // ADDED
-        public IObservable<(ParseLiveQueryClient client, bool userInitiated)> OnDisconnected => _disconnectedSubject.AsObservable(); // ADDED
-        public IObservable<LiveQueryException> OnError => _errorSubject.AsObservable();                                    // ADDED
-        public IObservable<(int requestId, Subscription subscription)> OnSubscribed => _subscribedSubject.AsObservable();   // ADDED
-        public IObservable<(int requestId, Subscription subscription)> OnUnsubscribed => _unsubscribedSubject.AsObservable(); // ADDED
-        public IObservable<(Subscription.Event evt, object objectDictionnary, Subscription subscription)> OnObjectEvent => _objectEventSubject.AsObservable(); // ADDED
-
-
-        public ParseLiveQueryClient() : this(GetDefaultUri()) { }
-        public ParseLiveQueryClient(Uri hostUri) : this(hostUri, WebSocketClient.Factory) { } // Updated Factory, no callback changes here
-        public ParseLiveQueryClient(WebSocketClientFactory webSocketClientFactory) : this(GetDefaultUri(), webSocketClientFactory) { }
-        public ParseLiveQueryClient(Uri hostUri, WebSocketClientFactory webSocketClientFactory) :
-            this(hostUri, webSocketClientFactory, new SubscriptionFactory(), new TaskQueueWrapper())
-        { }
-
-        internal ParseLiveQueryClient(Uri hostUri, WebSocketClientFactory webSocketClientFactory,
-            ISubscriptionFactory subscriptionFactory, ITaskQueue taskQueue)
+        Uri serverUri = new(server);
+        return new UriBuilder(serverUri)
         {
-            _hostUri = hostUri;
-            _applicationId = ParseClient.Instance.ServerConnectionData.ApplicationID;
-            _clientKey = ParseClient.Instance.ServerConnectionData.Key;
+            Scheme = serverUri.Scheme.Equals("https") ? "wss" : "ws"
+        }.Uri;
+    }
 
-            _webSocketClientFactory = webSocketClientFactory;
-            _webSocketClientCallback = new WebSocketClientCallback(this);
-            _subscriptionFactory = subscriptionFactory;
-            _taskQueue = taskQueue;
+
+    /// <summary>
+    /// Subscribes to a specified Parse query to receive real-time updates 
+    /// for Create, Update, Delete, and other events on objects matching the query.
+    /// </summary>
+    public Subscription<T> Subscribe<T>(ParseQuery<T> query) where T : ParseObject
+    {
+
+        // Create Subscription object
+        var requestId = _requestIdCount++;
+        var subscription = _subscriptionFactory.CreateSubscription(requestId, query);
+
+        // Add to subscriptions collection
+        _subscriptions.TryAdd(requestId, subscription);
+
+        // Handle cases
+        if (IsConnected)
+        {
+            SendSubscription(subscription);
         }
-
-        private static Uri GetDefaultUri()
+        else if (_userInitiatedDisconnect)
         {
-            string server = ParseClient.Instance.ServerConnectionData.ServerURI;
-            if (server == null)
-                throw new InvalidOperationException("Missing default Server URI in CurrentConfiguration");
-
-            Uri serverUri = new Uri(server);
-            return new UriBuilder(serverUri)
-            {
-                Scheme = serverUri.Scheme.Equals("https") ? "wss" : "ws"
-            }.Uri;
+            throw new InvalidOperationException("The client was explicitly disconnected and must be reconnected before subscribing");
         }
-
-        /// <summary>
-        /// Subscribes to a specified Parse query to receive real-time updates 
-        /// for Create, Update, Delete, and other events on objects matching the query.
-        /// </summary>
-        public Subscription<T> Subscribe<T>(ParseQuery<T> query) where T : ParseObject
+        else
         {
-            int requestId = _requestIdCount++;
-            Subscription<T> subscription = _subscriptionFactory.CreateSubscription(requestId, query);
-
-            _subscriptions.TryAdd(requestId, subscription);
-
-            if (IsConnected())
-            {
-                SendSubscription(subscription);
-            }
-            else if (_userInitiatedDisconnect)
-            {
-                throw new InvalidOperationException("The client was explicitly disconnected and must be reconnected before subscribing");
-            }
-            else
-            {
-                ConnectIfNeeded();
-            }
-            return subscription;
+            ConnectIfNeeded();
         }
+        return subscription;
+    }
 
-        public void ConnectIfNeeded()
+    //public bool IsConnected
+    //{
+    //    get 
+    //    { 
+    //        return IsConnected(); 
+    //    }        
+    //}
+
+    public void ConnectIfNeeded()
+    {
+        switch (GetWebSocketState())
         {
-            switch (GetWebSocketState())
+            case WebSocketClientState.None:
+            case WebSocketClientState.Disconnecting:
+            case WebSocketClientState.Disconnected:
+                Reconnect();
+                break;
+            case WebSocketClientState.Connecting:
+            case WebSocketClientState.Connected:
+                break;
+            default:
+                break;
+        }
+    }
+
+
+    public void Unsubscribe<T>(ParseQuery<T> query) where T : ParseObject
+    {
+        if (query == null)
+            return;
+        RemoveSubscriptions(query, null);
+    }
+
+    public void Unsubscribe<T>(ParseQuery<T> query, Subscription<T> subscription) where T : ParseObject
+    {
+        if (query == null || subscription == null)
+            return;
+        RemoveSubscriptions(query, subscription);
+    }
+
+    // Private method to centralize unsubscription logic
+    private void RemoveSubscriptions<T>(ParseQuery<T> query, Subscription<T> specificSubscription) where T : ParseObject
+    {
+        var requestIdsToRemove = new List<int>();
+
+        foreach (var pair in _subscriptions)
+        {
+            var requestId = pair.Key;
+            var sub = pair.Value;
+
+            if (query.Equals(sub.QueryObj) && (specificSubscription == null || specificSubscription.Equals(sub)))
             {
-                case WebSocketClientState.None:
-                    
-                    Reconnect();
-                    break;
-                case WebSocketClientState.Connecting:
-                    
-                    break;
-                case WebSocketClientState.Disconnecting:
-                    
-                    Reconnect();
-                    break;
-                case WebSocketClientState.Connected:
-                    
-                    break;
-                case WebSocketClientState.Disconnected:
-                    
-                    Reconnect();
-                    break;
-                default:
-                    break;
+                SendUnsubscription((Subscription<T>)sub); // Cast here for unsubscription
+                requestIdsToRemove.Add(requestId);
             }
         }
 
-        public void Unsubscribe<T>(ParseQuery<T> query) where T : ParseObject
+        foreach (var requestId in requestIdsToRemove)
         {
-            if (query == null)
-            {
-                return;
-            }
-            var requestIds = new List<int>();
-            foreach (int rId in _subscriptions.Keys)
-            {
-                var sub = _subscriptions[rId];
-                if (query.Equals(sub.QueryObj))
-                {
-                    SendUnsubscription((Subscription<T>)sub);
-                    requestIds.Add(rId);
-                }
-            }
-
-            Subscription dummy = null;
-            foreach (int requestId in requestIds)
-            {
-                _subscriptions.TryRemove(requestId, out dummy);
-            }
+            _subscriptions.TryRemove(requestId, out _); // Ignore out parameter, value already in sub
         }
+    }
 
-        public void Unsubscribe<T>(ParseQuery<T> query, Subscription<T> subscription) where T : ParseObject
-        {
-            if (query == null || subscription == null)
-                return;
-            var requestIds = new List<int>();
-            foreach (int requestId in _subscriptions.Keys)
+
+    public void Reconnect()
+    {
+        _webSocketClient?.Close();
+        _userInitiatedDisconnect = false;
+        _hasReceivedConnected = false;
+        _webSocketClient = _webSocketClientFactory(_hostUri, new WebSocketClientCallback(this)); // Pass callback here
+        _webSocketClient.Open();
+    }
+
+
+    public void Disconnect()
+    {
+        _webSocketClient?.Close();
+        _webSocketClient = null;
+
+        _userInitiatedDisconnect = true;
+        _hasReceivedConnected = false;
+        _disconnectedSubject.OnNext((this, _userInitiatedDisconnect));
+    }
+
+
+    private WebSocketClientState GetWebSocketState()
+    {
+        return _webSocketClient == null ? WebSocketClientState.None :
+            _webSocketClient.State switch
             {
-                var sub = _subscriptions[requestId];
-                if (query.Equals(sub.QueryObj) && subscription.Equals(sub))
-                {
-                    SendUnsubscription(subscription);
-                    requestIds.Add(requestId);
-                }
-            }
-            Subscription dummy = null;
-            foreach (int requestId in requestIds)
+                WebSocketState.Connecting => WebSocketClientState.Connecting,
+                WebSocketState.Open => WebSocketClientState.Connected,
+                WebSocketState.Closed or WebSocketState.Error => WebSocketClientState.Disconnected,
+                _ => WebSocketClientState.None
+            };
+    }
+
+    public bool IsConnected { get => _hasReceivedConnected; }
+
+    private void SendSubscription(Subscription subscription)
+    {
+        _taskQueue.EnqueueOnError(
+            SendOperationWithSessionAsync(session => subscription.CreateSubscribeClientOperation(session ?? string.Empty)),
+            error => subscription.DidEncounter(subscription.QueryObj, new LiveQueryException.UnknownException("Error when subscribing", error))
+        );
+    }
+
+
+    private void SendUnsubscription<T>(Subscription<T> subscription) where T : ParseObject
+    {
+        SendOperationAsync(new UnsubscribeClientOperation(subscription.RequestId));
+    }
+
+
+    private Task SendOperationWithSessionAsync(Func<string, IClientOperation> operationFunc)
+    {
+        return _taskQueue.EnqueueOnSuccess(
+       ParseClient.Instance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClient.Instance.Services, CancellationToken.None),
+
+       currentSessionTokenTask =>
+       {
+           var sessionToken = currentSessionTokenTask?.Result; // Can be null if no session
+           return SendOperationAsync(operationFunc(sessionToken));
+       }
+   );
+    }
+
+    private Task SendOperationAsync(IClientOperation operation)
+    {
+
+        return _taskQueue.Enqueue(() => _webSocketClient.Send(operation.ToJson()));
+    }
+
+    private Task HandleOperationAsync(string message)
+    {
+        return _taskQueue.Enqueue(() => ParseMessage(message));
+    }
+
+    private IDictionary<string, object> ConvertJsonElements(Dictionary<string, JsonElement> jsonElementDict)
+    {
+        var result = new Dictionary<string, object>();
+
+        foreach (var kvp in jsonElementDict)
+        {
+            JsonElement element = kvp.Value;
+
+            object value = element.ValueKind switch
             {
-                _subscriptions.TryRemove(requestId, out dummy);
-            }
-        }
-
-        public void Reconnect()
-        {
-            _webSocketClient?.Close();
-            _userInitiatedDisconnect = false;
-            _hasReceivedConnected = false;
-            _webSocketClient = _webSocketClientFactory(_hostUri, _webSocketClientCallback);
-            _webSocketClient.Open();
-        }
-
-        public void Disconnect()
-        {
-            _webSocketClient?.Close();
-            _webSocketClient = null;
-
-            _userInitiatedDisconnect = true;
-            _hasReceivedConnected = false;
-        }
-
-        private WebSocketClientState GetWebSocketState()
-        {
-            if (_webSocketClient == null)
-                return WebSocketClientState.None;
-
-            var wsState = _webSocketClient.State;
-
-            switch (wsState)
-            {
-                case WebSocketState.Connecting:
-                    return WebSocketClientState.Connecting;
-                case WebSocketState.Open:
-                    return WebSocketClientState.Connected;
-                case WebSocketState.Closed:
-                case WebSocketState.Error:
-                    return WebSocketClientState.Disconnected;
-                default:
-                    return WebSocketClientState.None;
-            }
-        }
-
-
-        private bool IsConnected()
-        {
-            var wsState = GetWebSocketState();
-            if (wsState == WebSocketClientState.Connected)
-            {
-
-            }
-            var e = _hasReceivedConnected;
-            return e;
-        }
-
-        private void SendSubscription(Subscription subscription)
-        {
-            _taskQueue.EnqueueOnError(
-                SendOperationWithSessionAsync(subscription.CreateSubscribeClientOperation),
-                error => subscription.DidEncounter(subscription.QueryObj, new LiveQueryException.UnknownException("Error when subscribing", error))
-            );
-        }
-
-        private void SendUnsubscription<T>(Subscription<T> subscription) where T : ParseObject
-        {
-            SendOperationAsync(new UnsubscribeClientOperation(subscription.RequestId));
-        }
-
-        private Task SendOperationWithSessionAsync(Func<string, IClientOperation> operationFunc)
-        {
-            return _taskQueue.EnqueueOnSuccess(
-                ParseClient.Instance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClient.Instance.Services, CancellationToken.None),
-                currentSessionTokenTask => SendOperationAsync(operationFunc(currentSessionTokenTask.Result))
-            );
-        }
-
-        private Task SendOperationAsync(IClientOperation operation)
-        {
-            return _taskQueue.Enqueue(() => _webSocketClient.Send(operation.ToJson()));
-        }
-
-        private Task HandleOperationAsync(string message)
-        {
-            return _taskQueue.Enqueue(() => ParseMessage(message));
-        }
-
-        private IDictionary<string, object> ConvertJsonElements(Dictionary<string, JsonElement> jsonElementDict)
-        {
-            var result = new Dictionary<string, object>();
-
-            foreach (var kvp in jsonElementDict)
-            {
-                JsonElement element = kvp.Value;
-
-                object value = element.ValueKind switch
-                {
-                    JsonValueKind.String => element.GetString(),
-                    JsonValueKind.Number => element.TryGetInt64(out long l) ? l : element.GetDouble(),
-                    JsonValueKind.True => true,
-                    JsonValueKind.False => false,
-                    JsonValueKind.Null => null,
-                    _ => element
-                };
-
-                result[kvp.Key] = value;
-            }
-
-            return result;
-        }
-
-        private void ParseMessage(string message)
-        {
-            try
-            {
-                var jsonElementDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message);
-
-                if (jsonElementDict == null || !jsonElementDict.ContainsKey("op"))
-                {
-                    throw new LiveQueryException.InvalidResponseException("Message does not contain a valid 'op' field.");
-                }
-
-                var jsonObject = ConvertJsonElements(jsonElementDict);
-                string rawOperation = jsonObject["op"] as string;
-                if (string.IsNullOrEmpty(rawOperation))
-                {
-                    throw new LiveQueryException.InvalidResponseException("'op' field is null or empty.");
-                }
-
-                switch (rawOperation)
-                {
-                    case "connected":
-                        _hasReceivedConnected = true;
-                        // CHANGED: Instead of DispatchConnected(), we now use Rx subject
-                        // DispatchConnected(); // REMOVED
-                        _connectedSubject.OnNext(this); // ADDED
-                        foreach (Subscription subscription in _subscriptions.Values)
-                        {
-                            SendSubscription(subscription);
-                        }
-                        break;
-                    case "redirect":
-                        // TODO: Handle redirect if needed
-                        break;
-                    case "subscribed":
-                        HandleSubscribedEvent(jsonObject);
-                        break;
-                    case "unsubscribed":
-                        HandleUnsubscribedEvent(jsonObject);
-                        break;
-                    case "enter":
-                        HandleObjectEvent(Subscription.Event.Enter, jsonObject);
-                        break;
-                    case "leave":
-                        HandleObjectEvent(Subscription.Event.Leave, jsonObject);
-                        break;
-                    case "update":
-                        HandleObjectEvent(Subscription.Event.Update, jsonObject);
-                        break;
-                    case "create":
-                        HandleObjectEvent(Subscription.Event.Create, jsonObject);
-                        break;
-                    case "delete":
-                        HandleObjectEvent(Subscription.Event.Delete, jsonObject);
-                        break;
-                    case "error":
-                        HandleErrorEvent(jsonObject);
-                        break;
-                    default:
-                        throw new LiveQueryException.InvalidResponseException($"Unexpected operation: {rawOperation}");
-                }
-            }
-            catch (Exception e) when (!(e is LiveQueryException))
-            {
-                throw new LiveQueryException.InvalidResponseException(message, e);
-            }
-        }
-
-        // CHANGED: Removed DispatchConnected/Disconnected/Error/SocketError with callback loops
-        // They are replaced with Subject.OnNext calls directly
-
-        private void HandleSubscribedEvent(IDictionary<string, object> jsonObject)
-        {
-            int requestId = Convert.ToInt32(jsonObject["requestId"]);
-
-            if (_subscriptions.TryGetValue(requestId, out var subscription))
-            {
-                subscription.DidSubscribe(subscription.QueryObj);
-                // CHANGED: Instead of callback-based dispatch, use Rx subject
-                _subscribedSubject.OnNext((requestId, subscription)); // ADDED
-            }
-        }
-
-        private void HandleUnsubscribedEvent(IDictionary<string, object> jsonObject)
-        {
-            int requestId = Convert.ToInt32(jsonObject["requestId"]);
-
-            if (_subscriptions.TryRemove(requestId, out var subscription))
-            {
-                subscription.DidUnsubscribe(subscription.QueryObj);
-                // CHANGED: Instead of callback-based dispatch, use Rx subject
-                _unsubscribedSubject.OnNext((requestId, subscription)); // ADDED
-            }
-        }
-
-        private void HandleObjectEvent(Subscription.Event subscriptionEvent, IDictionary<string, object> jsonObject)
-        {
-            try
-            {
-                int requestId = Convert.ToInt32(jsonObject["requestId"]);
-                var objectElement = (JsonElement)jsonObject["object"];
-                //var objectElement = (JsonElement)jsonObject["original"]; // TODO: Expose this in the future
-                IDictionary<string, object> objectData = JsonElementToDictionary(objectElement);
-
-                if (_subscriptions.TryGetValue(requestId, out var subscription))
-                {
-                    var obj = ParseClient.Instance.Decoder.Decode(objectData, ParseClient.Instance.Services);
-        
-                    //TODO 
-                    _objectEventSubject.OnNext((subscriptionEvent, obj, subscription)); // ADDED
-                }
-
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error in HandleObjectEvent: {ex.Message}");
-            }
-        }
-
-        private IDictionary<string, object> JsonElementToDictionary(JsonElement element)
-        {
-            if (element.ValueKind != JsonValueKind.Object)
-            {
-                throw new ArgumentException("Expected JsonElement to be an object.");
-            }
-
-            var result = new Dictionary<string, object>();
-            foreach (var property in element.EnumerateObject())
-            {
-                result[property.Name] = JsonElementToObject(property.Value);
-            }
-
-            return result;
-        }
-
-        private object JsonElementToObject(JsonElement element)
-        {
-            return element.ValueKind switch
-            {
-                JsonValueKind.Object => JsonElementToDictionary(element),
-                JsonValueKind.Array => JsonArrayToObjectList(element),
                 JsonValueKind.String => element.GetString(),
                 JsonValueKind.Number => element.TryGetInt64(out long l) ? l : element.GetDouble(),
                 JsonValueKind.True => true,
                 JsonValueKind.False => false,
                 JsonValueKind.Null => null,
-                _ => throw new ArgumentException($"Unsupported JsonValueKind: {element.ValueKind}")
+                _ => element
             };
+
+            result[kvp.Key] = value;
         }
 
-        private List<object> JsonArrayToObjectList(JsonElement element)
+        return result;
+    }
+
+    private void ParseMessage(string message)
+    {
+        try
         {
-            var list = new List<object>();
-            foreach (var arrayElement in element.EnumerateArray())
+            var jsonElementDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message);
+
+            if (jsonElementDict == null || !jsonElementDict.ContainsKey("op"))
             {
-                list.Add(JsonElementToObject(arrayElement));
+                throw new LiveQueryException.InvalidResponseException("Message does not contain a valid 'op' field.");
             }
-            return list;
+
+            var jsonObject = ConvertJsonElements(jsonElementDict);
+            string rawOperation = jsonObject["op"] as string;
+            if (string.IsNullOrEmpty(rawOperation))
+            {
+                throw new LiveQueryException.InvalidResponseException("'op' field is null or empty.");
+            }
+
+            switch (rawOperation)
+            {
+                case "connected":
+                    _hasReceivedConnected = true;
+                    _connectedSubject.OnNext(this);
+                    foreach (Subscription subscription in _subscriptions.Values)
+                    {
+                        SendSubscription(subscription);
+                    }
+                    break;
+                case "redirect":
+                    // TODO: Handle redirect if needed
+                    break;
+                case "subscribed":
+                    HandleSubscribedEvent(jsonObject);
+                    break;
+                case "unsubscribed":
+                    HandleUnsubscribedEvent(jsonObject);
+                    break;
+                case "enter":
+                    HandleObjectEvent(Subscription.Event.Enter, jsonObject);
+                    break;
+                case "leave":
+                    HandleObjectEvent(Subscription.Event.Leave, jsonObject);
+                    break;
+                case "update":
+                    HandleObjectEvent(Subscription.Event.Update, jsonObject);
+                    break;
+                case "create":
+                    HandleObjectEvent(Subscription.Event.Create, jsonObject);
+                    break;
+                case "delete":
+                    HandleObjectEvent(Subscription.Event.Delete, jsonObject);
+                    break;
+                case "error":
+                    HandleErrorEvent(jsonObject);
+                    break;
+                default:
+                    throw new LiveQueryException.InvalidResponseException($"Unexpected operation: {rawOperation}");
+            }
+        }
+        catch (Exception e) when (!(e is LiveQueryException))
+        {
+            _errorSubject.OnNext(new LiveQueryException.InvalidResponseException(message, e));
+        }
+    }
+
+    private void HandleSubscribedEvent(IDictionary<string, object> jsonObject)
+    {
+        if (jsonObject.TryGetValue("requestId", out var requestIdObj) &&
+            requestIdObj is int requestId &&
+                _subscriptions.TryGetValue(requestId, out var subscription))
+        {
+            subscription.DidSubscribe(subscription.QueryObj);
+            _subscribedSubject.OnNext((requestId, subscription));
+        }
+    }
+
+
+    private void HandleUnsubscribedEvent(IDictionary<string, object> jsonObject)
+    {
+        if (jsonObject.TryGetValue("requestId", out var requestIdObj) &&
+            requestIdObj is int requestId &&
+                _subscriptions.TryRemove(requestId, out var subscription))
+        {
+            subscription.DidUnsubscribe(subscription.QueryObj);
+            _unsubscribedSubject.OnNext((requestId, subscription));
+        }
+    }
+
+
+    private void HandleObjectEvent(Subscription.Event subscriptionEvent, IDictionary<string, object> jsonObject)
+    {
+        try
+        {
+            int requestId = Convert.ToInt32(jsonObject["requestId"]);
+            var jsonElement = (JsonElement)jsonObject["object"];
+            var objectData = JsonElementToDictionary(jsonElement);
+            //var objectElement = (JsonElement)jsonObject["original"]; // TODO: Expose this in the future
+            if (_subscriptions.TryGetValue(requestId, out var subscription))
+            {
+                var obj = ParseClient.Instance.Decoder.Decode(objectData, ParseClient.Instance.Services);
+
+                _objectEventSubject.OnNext((subscriptionEvent, obj, subscription));
+            }
+
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error in HandleObjectEvent: {ex.Message}");
+            _errorSubject.OnNext(new LiveQueryException.UnknownException("Error handling object event", ex));
+        }
+    }
+
+
+    private IDictionary<string, object> JsonElementToDictionary(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            throw new ArgumentException("Expected JsonElement to be an object.");
         }
 
-        private void HandleErrorEvent(IDictionary<string, object> jsonObject)
+        var result = new Dictionary<string, object>();
+        foreach (var property in element.EnumerateObject())
         {
-            object requestId = jsonObject.GetOrDefault("requestId", null);
+            result[property.Name] = JsonElementToObject(property.Value);
+        }
+        return result;
+    }
+
+    private object JsonElementToObject(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.Object => JsonElementToDictionary(element),
+            JsonValueKind.Array => JsonArrayToObjectList(element),
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.Number => element.TryGetInt64(out long l) ? l : element.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            _ => throw new ArgumentException($"Unsupported JsonValueKind: {element.ValueKind}")
+        };
+    }
+
+
+    private List<object> JsonArrayToObjectList(JsonElement element)
+    {
+        var list = new List<object>();
+        foreach (var arrayElement in element.EnumerateArray())
+        {
+            list.Add(JsonElementToObject(arrayElement));
+        }
+        return list;
+    }
+
+
+    private void HandleErrorEvent(IDictionary<string, object> jsonObject)
+    {
+        if (jsonObject.TryGetValue("requestId", out var requestIdObj) && requestIdObj is int requestId)
+        {
+
+            if (_subscriptions.TryGetValue(requestId, out var subscription))
+            {
+
+                int code = Convert.ToInt32(jsonObject["code"]);
+                string error = (string)jsonObject["error"];
+                bool reconnect = (bool)jsonObject["reconnect"];
+                LiveQueryException exception = new LiveQueryException.ServerReportedException(code, error, reconnect);
+                subscription.DidEncounter(subscription.QueryObj, exception);
+                _errorSubject.OnNext(exception);
+            }
+        }
+        else
+        {
             int code = Convert.ToInt32(jsonObject["code"]);
             string error = (string)jsonObject["error"];
             bool reconnect = (bool)jsonObject["reconnect"];
             LiveQueryException exception = new LiveQueryException.ServerReportedException(code, error, reconnect);
+            _errorSubject.OnNext(exception);
+        }
+    }
 
-            if (requestId != null && _subscriptions.TryGetValue(Convert.ToInt32(requestId), out var subscription))
-            {
-                subscription.DidEncounter(subscription.QueryObj, exception);
-            }
-            _errorSubject.OnNext(exception); // ADDED
+    private void OnWebSocketClosed() => _disconnectedSubject.OnNext((this, _userInitiatedDisconnect));
+
+    private void OnWebSocketError(Exception exception) => _errorSubject.OnNext(new LiveQueryException.UnknownException("Socket error", exception));
+
+
+    private class WebSocketClientCallback : IWebSocketClientCallback
+    {
+        private readonly ParseLiveQueryClient _client;
+        public WebSocketClientCallback(ParseLiveQueryClient client)
+        {
+            _client = client;
         }
 
-        private void OnWebSocketClosed()
+        public async Task OnOpen()
         {
-            _disconnectedSubject.OnNext((this, _userInitiatedDisconnect)); // ADDED
-        }
-
-        private void OnWebSocketError(Exception exception)
-        {
-            _errorSubject.OnNext(new LiveQueryException.UnknownException("Socket error", exception));
-            _disconnectedSubject.OnNext((this, _userInitiatedDisconnect)); // ADDED
-        }
-
-        private class WebSocketClientCallback : IWebSocketClientCallback
-        {
-            private readonly ParseLiveQueryClient _client;
-
-            public WebSocketClientCallback(ParseLiveQueryClient client)
-            {
-                _client = client;
-            }
-
-            public async void OnOpen()
-            {
-                try
-                {
-                    _client._hasReceivedConnected = false;
-                    await _client.SendOperationWithSessionAsync(session =>
-                        new ConnectClientOperation(_client._applicationId, _client._clientKey, session))
-                        .ConfigureAwait(false);
-
-                }
-                catch (Exception ex)
-                {
-                    var exception = ex is AggregateException ae ? ae.Flatten() : ex;
-                    // CHANGED: Instead of DispatchError, use Rx subject
-                    _client._errorSubject.OnNext(
-                        exception is LiveQueryException lqex ? lqex :
-                        new LiveQueryException.UnknownException("Error connecting client", exception)); // ADDED
-                }
-            }
-
-            public async void OnMessage(string message)
-            {
-                try
-                {
-                    await _client.HandleOperationAsync(message).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    var exception = ex is AggregateException ae ? ae.Flatten() : ex;
-                    // CHANGED: Instead of DispatchError, use Rx subject
-                    _client._errorSubject.OnNext(
-                        exception is LiveQueryException lqex ? lqex :
-                        new LiveQueryException.UnknownException($"Error handling message: {message}", exception)); // ADDED
-                }
-            }
-
-            public void OnClose()
+            try
             {
                 _client._hasReceivedConnected = false;
-                _client.OnWebSocketClosed(); // ADDED call to new method that triggers Rx disconnected event
+                await _client.SendOperationWithSessionAsync(session =>
+                    new ConnectClientOperation(_client._applicationId, _client._clientKey, session))
+                    .ConfigureAwait(false);
             }
-
-            public void OnError(Exception exception)
+            catch (Exception ex)
             {
-                _client._hasReceivedConnected = false;
-                _client.OnWebSocketError(exception); // ADDED call to new method that triggers Rx error event
-            }
-
-            public void OnStateChanged()
-            {
-                // No callback needed
+                var exception = ex is AggregateException ae ? ae.Flatten() : ex;
+                _client._errorSubject.OnNext(
+                    exception is LiveQueryException lqex ? lqex :
+                    new LiveQueryException.UnknownException("Error connecting client", exception));
             }
         }
 
-        private class SubscriptionFactory : ISubscriptionFactory
+
+        public async Task OnMessage(string message)
         {
-            public Subscription<T> CreateSubscription<T>(int requestId, ParseQuery<T> query) where T : ParseObject
+            try
             {
-                return new Subscription<T>(requestId, query);
+                await _client.HandleOperationAsync(message).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                var exception = ex is AggregateException ae ? ae.Flatten() : ex;
+                _client._errorSubject.OnNext(
+                    exception is LiveQueryException lqex ? lqex :
+                    new LiveQueryException.UnknownException($"Error handling message: {message}", exception));
             }
         }
 
-        private class TaskQueueWrapper : ITaskQueue
+        public void OnClose()
         {
-            private readonly TaskQueue _underlying = new();
+            _client._hasReceivedConnected = false;
+            _client.OnWebSocketClosed();
+        }
 
-            public async Task Enqueue(Action taskStart)
-            {
-                await _underlying.Enqueue(async _ =>
-                {
-                    taskStart();
-                    await Task.CompletedTask;
-                }, CancellationToken.None);
-            }
-
-            public async Task EnqueueOnSuccess<TIn>(Task<TIn> task, Func<Task<TIn>, Task> onSuccess)
-            {
-                try
-                {
-                    await task.ConfigureAwait(false);
-                    await onSuccess(task).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException("Error in EnqueueOnSuccess", ex);
-                }
-            }
-
-            public async Task EnqueueOnError(Task task, Action<Exception> onError)
-            {
-                try
-                {
-                    await task.ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    onError(ex);
-                }
-            }
+        public void OnError(Exception exception)
+        {
+            _client._hasReceivedConnected = false;
+            _client.OnWebSocketError(exception);
+        }
+        public void OnStateChanged()
+        {
+            // No callback needed
         }
 
     }
+    private class SubscriptionFactory : ISubscriptionFactory
+    {
+        public Subscription<T> CreateSubscription<T>(int requestId, ParseQuery<T> query) where T : ParseObject
+        {
+            return new Subscription<T>(requestId, query);
+        }
+    }
 
+        
 
 }
+
+
 public interface IWebSocketClientCallback
 {
-    void OnOpen();
-    void OnMessage(string message);
+    Task OnOpen();
+    Task OnMessage(string message);
     void OnClose();
     void OnError(Exception exception);
     void OnStateChanged();
+}
+
+
+
+public static class ObjectMapper 
+{
+    /// <summary>
+    /// Maps values from a dictionary to an instance of type T.
+    /// Logs any keys that don't match properties in T.
+    ///     
+    /// Helper to Map from Parse Dictionnary Response to Model
+    /// Example usage TestChat chat = ObjectMapper.MapFromDictionary<TestChat>(objData);    
+    /// </summary>
+    public static T MapFromDictionary<T>(IDictionary<string, object> source) where T : class
+    {
+        try
+        {
+            // Attempt to create an instance of T using Activator.CreateInstance
+            // This will return null if T doesn't have a parameterless constructor (or if it's abstract)
+            T target = (T)Activator.CreateInstance(typeof(T));
+
+            if (target == null)
+            {
+                Debug.WriteLine($"Warning: Could not create an instance of {typeof(T).Name}. Ensure it has a public parameterless constructor.");
+                return null; // Return null if instantiation fails
+            }
+
+            // Get all writable properties of T
+            var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanWrite)
+                .ToDictionary(p => p.Name, p => p, StringComparer.OrdinalIgnoreCase);
+
+            // Track unmatched keys
+            List<string> unmatchedKeys = new();
+
+            foreach (var kvp in source)
+            {
+                if (properties.TryGetValue(kvp.Key, out var property))
+                {
+                    try
+                    {
+                        // Convert and assign the value to the property
+                        if (kvp.Value != null && property.PropertyType.IsAssignableFrom(kvp.Value.GetType()))
+                        {
+                            property.SetValue(target, kvp.Value);
+                        }
+                        else if (kvp.Value != null)
+                        {
+                            // Attempt conversion for non-directly assignable types
+                            var convertedValue = Convert.ChangeType(kvp.Value, property.PropertyType);
+                            property.SetValue(target, convertedValue);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Failed to set property {property.Name} on {typeof(T).Name}: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    // Log unmatched keys
+                    unmatchedKeys.Add(kvp.Key);
+                }
+            }
+
+            // Log keys that don't match
+            if (unmatchedKeys.Count > 0)
+            {
+                Debug.WriteLine($"Unmatched Keys for {typeof(T).Name}:");
+                foreach (var key in unmatchedKeys)
+                {
+                    Debug.WriteLine($"- {key}");
+                }
+            }
+
+            return target;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error creating instance of {typeof(T).Name}: {ex.Message}");
+            return null; // Return null if any error occurs during instantiation
+        }
+    }
+
+    public static Dictionary<string, object> ClassToDictionary<T>(T obj) where T : class
+    {
+        if (obj == null)
+        {
+            return null;
+        }
+
+        var dictionary = new Dictionary<string, object>();
+        var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+        foreach (var property in properties)
+        {
+            string name = property.Name;
+            object value = property.GetValue(obj);
+
+            if (value != null)
+            {
+                dictionary[name] = ConvertValueForDictionary(value);
+            }
+        }
+
+        return dictionary;
+    }
+
+    private static object ConvertValueForDictionary(object value)
+    {
+        if (value == null)
+        {
+            return null;
+        }
+
+        // Handle Parse specific types first for efficiency
+
+        // ParseObject (for Pointers)
+        if (value is ParseObject parseObject && !string.IsNullOrEmpty(parseObject.ObjectId))
+        {
+            return new Dictionary<string, object>
+            {
+                { "__type", "Pointer" },
+                { "className", parseObject.ClassName },
+                { "objectId", parseObject.ObjectId }
+            };
+        }
+
+        // ParseFile
+        if (value is ParseFile parseFile && !string.IsNullOrEmpty(parseFile.Name) && parseFile.DataStream != null)
+        {
+            using var memoryStream = new MemoryStream();
+            parseFile.DataStream.CopyTo(memoryStream);
+            return new Dictionary<string, object>
+            {
+                { "__type", "File" },
+                { "name", parseFile.Name },
+                // URL is typically not set on a new ParseFile, so we rely on the data
+                { "_ContentType", parseFile.MimeType }, // Optional, but good to include
+                { "_Base64", Convert.ToBase64String(memoryStream.ToArray()) }
+            };
+        }
+
+        // ParseGeoPoint
+        if (value is ParseGeoPoint geoPoint)
+        {
+            return new Dictionary<string, object>
+            {
+                { "__type", "GeoPoint" },
+                { "latitude", geoPoint.Latitude },
+                { "longitude", geoPoint.Longitude }
+            };
+        }
+
+        //// ParseRelation (Asynchronous)
+        //if (value is ParseRelation<ParseObject> relation)
+        //{
+        //    var targetObjects = await relation.Query.FindAsync();
+        //    return targetObjects.Select(obj => new Dictionary<string, object>
+        //    {
+        //        { "__type", "Pointer" },
+        //        { "className", obj.ClassName },
+        //        { "objectId", obj.ObjectId }
+        //    }).ToList<object>();
+        //}
+        Type valueType = value.GetType();
+
+        if (valueType.IsPrimitive || value is string)
+        {
+            return value;
+        }
+
+        if (value is DateTime dateTime)
+        {
+            return new Dictionary<string, object>
+            {
+                { "__type", "Date" },
+                { "iso", dateTime.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ") }
+            };
+        }
+
+        if (value is byte[] byteArray)
+        {
+            return new Dictionary<string, object>
+            {
+                { "__type", "Bytes" },
+                { "base64", Convert.ToBase64String(byteArray) }
+            };
+        }
+
+        if (value is Stream stream)
+        {
+            using var memoryStream = new MemoryStream();
+            stream.CopyTo(memoryStream);
+            return new Dictionary<string, object>
+            {
+                { "__type", "Bytes" },
+                { "base64", Convert.ToBase64String(memoryStream.ToArray()) }
+            };
+        }
+
+        if (value is IList list) // Handle generic IList
+        {
+            if (list is not null)
+            {                
+                var convertedList = new List<object>();
+                foreach (var item in list)
+                {
+                    convertedList.Add(ConvertValueForDictionary(item));
+                }
+            
+                return convertedList;
+            }
+        }
+
+        if (value is IDictionary dictionary)
+        {
+            var convertedDictionary = new Dictionary<string, object>();
+            foreach (var key in dictionary.Keys)
+            {
+                convertedDictionary[key.ToString()] = ConvertValueForDictionary(dictionary[key]);
+            }
+            return convertedDictionary;
+        }
+
+        // Handle nested custom objects recursively
+        if (value.GetType().IsClass && value.GetType() != typeof(string))
+        {
+            return ClassToDictionary(value);
+        }
+
+        return value?.ToString(); // Fallback for unhandled types
+    }
 }

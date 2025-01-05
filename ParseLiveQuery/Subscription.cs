@@ -62,7 +62,7 @@ public class Subscription<T> : Subscription where T : ParseObject
         _unsubscribeStream.OnNext((ParseQuery<T>)queryObj);
     }
 
-    internal override IClientOperation CreateSubscribeClientOperation(string sessionToken)
+    internal override IClientOperation CreateSubscribeClientOperation(string sessionToken = null)
     {
         return new SubscribeClientOperation<T>(this, sessionToken);
     }

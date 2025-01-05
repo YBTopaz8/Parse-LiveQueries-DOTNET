@@ -9,13 +9,8 @@ namespace Parse.LiveQuery;
 /// </summary>
 public interface IWebSocketClient
 {
-    public IQbservable<WebSocketState> StateChanges { get; }
-    public IQbservable<string> Messages { get; }
-    public IQbservable<Exception> Errors { get; }
-
-
-    void Open();
-    void Close();
+    Task Open();
+    Task Close();
     Task Send(string message);
     WebSocketState State { get; }
 }
@@ -29,5 +24,6 @@ public enum WebSocketState
     Open,
     Closed,
     Connecting,
-    Error
+    Error,
+    None
 }

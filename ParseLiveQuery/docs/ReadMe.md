@@ -1,13 +1,11 @@
 ﻿### Parse-Live-Query-Unofficial
-- Now on V2.0.0 ! 🚀
+- Now on V2.0.1 ! 🚀
 - Added Support for .NET 5,6,7,8, 9 and .NET MAUI.
 - Replaced previous web client with `System.Net.WebSockets.Client` as I believe is better.
 - Replaced Subscriptions and callbacks with `System.Reactive` for better handling of events.
 - Added a YouTube video for a full walkthrough of the SDK.
 - Added a full ReadMe for the SDK.
 
-
-[https://youtu.be/OlpHIJDvl7E](https://youtu.be/V-cUjq7Js84)
 
 
 Here is the full ReadMe;
@@ -38,11 +36,11 @@ For now:
 
 ### STEP 0 (VERY IMPORTANT): MAKE SURE YOUR ENABLE LIVE QUERY ON THE CLASSES NEEDED.
 I used Back4Apps for dev/testing so the 2 classes I needed were checked!
-![image](https://github.com/user-attachments/assets/b9cba805-f81a-47e2-a999-ce6864ba438a)
+(Please check the Git Repo)
 
 
 ### 1. Download the project's source and add to your solution , your solution will look like this
-![image](https://github.com/user-attachments/assets/94a9b76d-20bb-4ec0-9fb6-ede63767a608)
+(Please check the Git Repo)
 ### 2. You will have to initialize your ParseClient with your app's details
 ```
 // Check for internet connection
@@ -72,71 +70,83 @@ client.Publicize(); // Best to use if you want to access ParseClient.Instance an
 ```
 ### 3. Setup Live Queries
 
-A subscription can be very easily handled as such;
+A subscription can be very easily handled as such
+I copied the code from my Sample Demo App (Here)[https://github.com/YBTopaz8/Chat-App-.NET-MAUI-LIVE-QUERY];
 ```
-ParseLiveQueryClient LiveClient = new ParseLiveQueryClient();
- async Task SetupLiveQuery()
- {
-     try
-     {
-         var query = ParseClient.Instance.GetQuery("CLASS_TO_SUB_TO");
-         //.WhereEqualTo("IsDeleted", false); Condition where App/Server will communicate
 
-         var subscription = LiveClient.Subscribe(query); // You subscribe here
-        
-//optional
- LiveClient.RegisterListener(this); // This is important is you need to reach to Web Connection changes
+    //I Will Just leave all this code in Docs because believe it or not, sometimes even I forget how to use my own lib :D
+    void SetupLiveQuery()
+    {
+        try
+        {
+            var query = ParseClient.Instance.GetQuery("TestChat");
+            var subscription = LiveClient.Subscribe(query);
 
+            LiveClient.ConnectIfNeeded();
 
-         sub.HandleSubscribe(async query =>
-         {
-             await Shell.Current.DisplayAlert("Subscribed", "Subscribed to query", "OK");
-             Debug.WriteLine($"Subscribed to query: {query.GetClassName()}"); 
-         })
-         .HandleEvents((query, objEvent, obj) =>
-         {
-             var object = obj  // will be the data returned by server. Could be new data, Same data or no data (After a Create, Read/Update/ Delete respectively)
+            // Rx event streams
+            LiveClient.OnConnected
+                .Subscribe(_ => Debug.WriteLine("LiveQuery connected."));
+            LiveClient.OnDisconnected
+                .Subscribe(info => Debug.WriteLine(info.userInitiated
+                    ? "User disconnected."
+                    : "Server disconnected."));
+            LiveClient.OnError
+                .Subscribe(ex => Debug.WriteLine("LQ Error: " + ex.Message));
+            LiveClient.OnSubscribed
+                .Subscribe(e => Debug.WriteLine("Subscribed to: " + e.requestId));
 
-             if (objEvent == Subscription.Event.Create) // if data was added to DAB online
-             {
+            // Handle object events (Create/Update/Delete)
+            LiveClient.OnObjectEvent
+                .Where(e => e.subscription == subscription)
+                
+                .Subscribe(e =>
+                {
+                    Debug.WriteLine($"Message before {Message?.Length}");
+                    TestChat chat = new();
+                    var objData = (e.objectDictionnary as Dictionary<string, object>);
 
-             }
-             else if (objEvent == Subscription.Event.Update) //Data was updated
-             {
-                 var f = Messages.FirstOrDefault(newComment);
-                 if (f is not null)
-                 {
+                    switch (e.evt)
+                    {
+                        
+                        case Subscription.Event.Enter:
+                            Debug.WriteLine("entered");
+                            break;
+                        case Subscription.Event.Leave:
+                            Debug.WriteLine("Left");
+                            break;
+                            case Subscription.Event.Create:
+                            chat = ObjectMapper.MapFromDictionary<TestChat>(objData);
+                            Messages.Add(chat);
+                            break;
+                            case Subscription.Event.Update:
+                            chat = ObjectMapper.MapFromDictionary<TestChat>(objData);
+                            var obj = Messages.FirstOrDefault(x => x.UniqueKey == chat.UniqueKey);
+                            
+                            Messages.RemoveAt(Messages.IndexOf(obj));
+                            Messages.Add(chat);
 
-                 }
-             }
-             else if (objEvent == Subscription.Event.Delete) //Data Removed from DB online
-             {
-            
-             }
-             Debug.WriteLine($"Event {objEvent} occurred for object: {obj.ObjectId}");
-         })
-         .HandleError((query, exception) =>
-         {
-             Debug.WriteLine($"Error in query for class {query.GetClassName()}: {exception.Message}");
-         })
-         .HandleUnsubscribe(query =>
-         {
-             Debug.WriteLine($"Unsubscribed from query: {query.GetClassName()}");
-         });
+                            break;
+                            case Subscription.Event.Delete:
+                            chat = ObjectMapper.MapFromDictionary<TestChat>(objData);
+                            var objj = Messages.FirstOrDefault(x => x.UniqueKey == chat.UniqueKey);
 
-         // Connect asynchronously 
-//OPTIONAL, but in real world scenarios, you'd better off calling it anyway.
-         await Task.Run(() => LiveClient.ConnectIfNeeded());
-     }
-     catch (IOException ex)
-     {
-         Console.WriteLine($"Connection error: {ex.Message}");
-     }
-     catch (Exception ex)
-     {
-         Debug.WriteLine($"SetupLiveQuery encountered an error: {ex.Message}");
-     }
- }
+                            Messages.RemoveAt(Messages.IndexOf(objj));
+                            break;
+                        default:
+                            break;
+                    }
+                    Debug.WriteLine($"Message after {Message.Length}");
+                    Debug.WriteLine($"Event {e.evt} on object {e.objectDictionnary.GetType()}");
+                });
+
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine("SetupLiveQuery Error: " + ex.Message);
+        }
+    }
+
 ```
 If you need a connection listener, you can set a class as 
 ```

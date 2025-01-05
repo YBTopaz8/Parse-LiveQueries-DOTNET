@@ -11,7 +11,8 @@ namespace Parse.LiveQuery;
 /// You can check the LiveQuery protocol for more details.
 /// <see href="https://github.com/parse-community/parse-server/wiki/Parse-LiveQuery-Protocol-Specification"/>
 /// </summary>
-public abstract class SessionClientOperation : IClientOperation {
+public abstract class SessionClientOperation : IClientOperation 
+{
 
     private readonly string _sessionToken;
 
@@ -27,8 +28,7 @@ public abstract class SessionClientOperation : IClientOperation {
         if (_sessionToken != null)
         {
             if (!jsonObject.ContainsKey("sessionToken"))
-            {
-        
+            {        
                 jsonObject.Add("sessionToken", _sessionToken);
             }
         }

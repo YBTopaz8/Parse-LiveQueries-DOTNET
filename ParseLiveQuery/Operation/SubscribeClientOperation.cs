@@ -8,7 +8,7 @@ using Parse.Infrastructure.Data;
 namespace Parse.LiveQuery;
 public class SubscribeClientOperation<T> : SessionClientOperation where T : ParseObject
 {
-    private static readonly Dictionary<string, object> EmptyJsonObject = new Dictionary<string, object>(0);
+    private static readonly Dictionary<string, object> EmptyJsonObject = new(0);
 
     private readonly int _requestId;
     private readonly ExtendedParseQuery<T> _query;
