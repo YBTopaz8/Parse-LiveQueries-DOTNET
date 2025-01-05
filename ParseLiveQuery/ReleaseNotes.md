@@ -1,4 +1,13 @@
-﻿# v3.0.0 🎄
+﻿# v3.0.1 - QOL update 🎇
+## It's no longer REQUIRED to be logged in order to connect to LQ.  
+Any client device can connect to Live Queries independently
+
+- Fixed #8  (saves dates as string for now instead of just not saving)
+- Fixed #4  
+- Closes #7 too 
+
+
+# v3.0.0 🎄
 
 ##### Major Update! - VERY IMPORTANT FOR SECURITY
 
