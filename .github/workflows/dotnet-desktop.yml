@@ -20,15 +20,14 @@ jobs:
         with:
           dotnet-version: '9.0' # Or the highest version you want to ensure is present
 
+      - name: Update Workloads
+        run: dotnet workload update
+        
       - name: Restore dependencies
         run: dotnet restore
 
       - name: Build project
         run: dotnet build --configuration Release
-
-      - name: Run tests (Optional)
-        run: dotnet test --configuration Release --no-build
-        continue-on-error: true
 
       - name: Pack NuGet package
         run: dotnet pack --configuration Release -o . /p:Version="$(git describe --tags --abbrev=0)"
