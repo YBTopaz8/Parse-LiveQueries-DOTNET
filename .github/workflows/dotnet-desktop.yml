@@ -29,9 +29,12 @@ jobs:
       - name: Build project
         run: dotnet build --configuration Release
 
-      - name: Pack NuGet package
-        run: dotnet pack --configuration Release -o . /p:Version="$(git describe --tags --abbrev=0)"
+      - name: Get NuGet package version from tag
+        id: get_version
+        run: echo "NUGET_VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')" >> $env:GITHUB_OUTPUT
 
+      - name: Pack NuGet package
+        run: dotnet pack --configuration Release -o . /p:Version=${{ steps.get_version.outputs.NUGET_VERSION }}
       - name: Push NuGet package to NuGet.org
         if: startsWith(github.ref, 'refs/heads/master')
         run: dotnet nuget push "*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
