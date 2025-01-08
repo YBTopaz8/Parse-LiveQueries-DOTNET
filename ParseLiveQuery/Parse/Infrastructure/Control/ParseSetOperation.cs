@@ -37,6 +37,10 @@ public class ParseSetOperation : IParseFieldOperation
             return dictionary;
         }
 
+        if(Value is null)
+        {
+            return new Dictionary<string, object> { ["value"] = null };
+        }
         // Default behavior for unsupported types
         throw new ArgumentException($"Unsupported type for encoding: {Value?.GetType()?.FullName}");
     }
