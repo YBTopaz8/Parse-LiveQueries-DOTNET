@@ -32,6 +32,7 @@ public class ParseLiveQueryClient
 
     // Use ConcurrentDictionary for thread-safe operations on subscriptions
     private readonly ConcurrentDictionary<int, Subscription> _subscriptions = new();
+    public IReadOnlyDictionary<int, Subscription> Subscriptions => _subscriptions;
 
     // Use Subjects for all event handling in Rx
     private readonly Subject<ParseLiveQueryClient> _connectedSubject = new();
@@ -370,6 +371,33 @@ public class ParseLiveQueryClient
         }
     }
 
+    public void RemoveAllSubscriptions()
+    {
+        if (_subscriptions is null || _subscriptions.IsEmpty)
+        {
+            return;
+        }
+
+        // Capture a thread-safe snapshot of the subscriptions
+        var subscriptionsToRemove = _subscriptions.ToArray();
+
+        foreach (var sub in subscriptionsToRemove)
+        {
+            // Get the actual subscription object
+            var subscription = sub.Value;
+
+            var subscriptionType = subscription.GetType();
+            var genericMethod = typeof(ParseLiveQueryClient)
+                .GetMethod("SendUnsubscription")
+                .MakeGenericMethod(subscriptionType.GenericTypeArguments[0]);
+
+            // Invoke the method
+            genericMethod.Invoke(this, new[] { subscription });
+
+            // Remove the subscription
+            _subscriptions.TryRemove(sub.Key, out _);
+        }
+    }
 
     public void Unsubscribe<T>(ParseQuery<T> query) where T : ParseObject
     {

@@ -693,14 +693,24 @@ public class ParseQuery<T> where T : ParseObject
         });
     }
 
-    internal ParseQuery<T> WhereRelatedTo(ParseObject parent, string key)
+    public ParseQuery<T> WhereRelatedTo(ParseObject parent, string key)
     {
+        if (parent == null)
+        {
+            throw new ArgumentNullException(nameof(parent));
+        }
+
+        if (string.IsNullOrEmpty(key))
+        {
+            throw new ArgumentException("Key cannot be null or empty.", nameof(key));
+        }
+
         return new ParseQuery<T>(this, where: new Dictionary<string, object>
         {
             ["$relatedTo"] = new Dictionary<string, object>
             {
                 ["object"] = parent,
-                [nameof(key)] = key
+                ["key"] = key
             }
         });
     }
