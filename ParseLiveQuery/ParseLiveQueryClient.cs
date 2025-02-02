@@ -51,236 +51,6 @@ public class ParseLiveQueryClient
     public IObservable<(Subscription.Event evt, object objectData, Subscription subscription)> OnObjectEvent => _objectEventSubject.AsObservable();
 
 
-    public static class ObjectMapper
-    {
-        /// <summary>
-        /// Maps values from a dictionary to an instance of type T.
-        /// Logs any keys that don't match properties in T.
-        ///     
-        /// Helper to Map from Parse Dictionnary Response to Model
-        /// Example usage TestChat chat = ObjectMapper.MapFromDictionary<TestChat>(objData);    
-        /// </summary>
-        public static T MapFromDictionary<T>(IDictionary<string, object> source) where T : class
-        {
-            try
-            {
-                // Attempt to create an instance of T using Activator.CreateInstance
-                // This will return null if T doesn't have a parameterless constructor (or if it's abstract)
-                T target = (T)Activator.CreateInstance(typeof(T));
-
-                if (target == null)
-                {
-                    Debug.WriteLine($"Warning: Could not create an instance of {typeof(T).Name}. Ensure it has a public parameterless constructor.");
-                    return null; // Return null if instantiation fails
-                }
-
-                // Get all writable properties of T
-                var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                    .Where(p => p.CanWrite)
-                    .ToDictionary(p => p.Name, p => p, StringComparer.OrdinalIgnoreCase);
-
-                // Track unmatched keys
-                List<string> unmatchedKeys = new();
-
-                foreach (var kvp in source)
-                {
-                    if (properties.TryGetValue(kvp.Key, out var property))
-                    {
-                        try
-                        {
-                            // Convert and assign the value to the property
-                            if (kvp.Value != null && property.PropertyType.IsAssignableFrom(kvp.Value.GetType()))
-                            {
-                                property.SetValue(target, kvp.Value);
-                            }
-                            else if (kvp.Value != null)
-                            {
-                                // Attempt conversion for non-directly assignable types
-                                var convertedValue = Convert.ChangeType(kvp.Value, property.PropertyType);
-                                property.SetValue(target, convertedValue);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"Failed to set property {property.Name} on {typeof(T).Name}: {ex.Message}");
-                        }
-                    }
-                    else
-                    {
-                        // Log unmatched keys
-                        unmatchedKeys.Add(kvp.Key);
-                    }
-                }
-
-                // Log keys that don't match
-                if (unmatchedKeys.Count > 0)
-                {
-                    Debug.WriteLine($"Unmatched Keys for {typeof(T).Name}:");
-                    foreach (var key in unmatchedKeys)
-                    {
-                        Debug.WriteLine($"- {key}");
-                    }
-                }
-
-                return target;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error creating instance of {typeof(T).Name}: {ex.Message}");
-                return null; // Return null if any error occurs during instantiation
-            }
-        }
-
-        public static Dictionary<string, object> ClassToDictionary<T>(T obj) where T : class
-        {
-            if (obj == null)
-            {
-                return null;
-            }
-
-            var dictionary = new Dictionary<string, object>();
-            var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
-
-            foreach (var property in properties)
-            {
-                string name = property.Name;
-                object value = property.GetValue(obj);
-
-                if (value != null)
-                {
-                    dictionary[name] = ConvertValueForDictionary(value);
-                }
-            }
-
-            return dictionary;
-        }
-
-        private static object ConvertValueForDictionary(object value)
-        {
-            if (value == null)
-            {
-                return null;
-            }
-
-            // Handle Parse specific types first for efficiency
-
-            // ParseObject (for Pointers)
-            if (value is ParseObject parseObject && !string.IsNullOrEmpty(parseObject.ObjectId))
-            {
-                return new Dictionary<string, object>
-            {
-                { "__type", "Pointer" },
-                { "className", parseObject.ClassName },
-                { "objectId", parseObject.ObjectId }
-            };
-            }
-
-            // ParseFile
-            if (value is ParseFile parseFile && !string.IsNullOrEmpty(parseFile.Name) && parseFile.DataStream != null)
-            {
-                using var memoryStream = new MemoryStream();
-                parseFile.DataStream.CopyTo(memoryStream);
-                return new Dictionary<string, object>
-            {
-                { "__type", "File" },
-                { "name", parseFile.Name },
-                // URL is typically not set on a new ParseFile, so we rely on the data
-                { "_ContentType", parseFile.MimeType }, // Optional, but good to include
-                { "_Base64", Convert.ToBase64String(memoryStream.ToArray()) }
-            };
-            }
-
-            // ParseGeoPoint
-            if (value is ParseGeoPoint geoPoint)
-            {
-                return new Dictionary<string, object>
-            {
-                { "__type", "GeoPoint" },
-                { "latitude", geoPoint.Latitude },
-                { "longitude", geoPoint.Longitude }
-            };
-            }
-
-            //// ParseRelation (Asynchronous)
-            //if (value is ParseRelation<ParseObject> relation)
-            //{
-            //    var targetObjects = await relation.Query.FindAsync();
-            //    return targetObjects.Select(obj => new Dictionary<string, object>
-            //    {
-            //        { "__type", "Pointer" },
-            //        { "className", obj.ClassName },
-            //        { "objectId", obj.ObjectId }
-            //    }).ToList<object>();
-            //}
-            Type valueType = value.GetType();
-
-            if (valueType.IsPrimitive || value is string)
-            {
-                return value;
-            }
-
-            if (value is DateTime dateTime)
-            {
-                return new Dictionary<string, object>
-            {
-                { "__type", "Date" },
-                { "iso", dateTime.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ") }
-            };
-            }
-
-            if (value is byte[] byteArray)
-            {
-                return new Dictionary<string, object>
-            {
-                { "__type", "Bytes" },
-                { "base64", Convert.ToBase64String(byteArray) }
-            };
-            }
-
-            if (value is Stream stream)
-            {
-                using var memoryStream = new MemoryStream();
-                stream.CopyTo(memoryStream);
-                return new Dictionary<string, object>
-            {
-                { "__type", "Bytes" },
-                { "base64", Convert.ToBase64String(memoryStream.ToArray()) }
-            };
-            }
-
-            if (value is IList list) // Handle generic IList
-            {
-                if (list is not null)
-                {
-                    var convertedList = new List<object>();
-                    foreach (var item in list)
-                    {
-                        convertedList.Add(ConvertValueForDictionary(item));
-                    }
-
-                    return convertedList;
-                }
-            }
-
-            if (value is IDictionary dictionary)
-            {
-                var convertedDictionary = new Dictionary<string, object>();
-                foreach (var key in dictionary.Keys)
-                {
-                    convertedDictionary[key.ToString()] = ConvertValueForDictionary(dictionary[key]);
-                }
-                return convertedDictionary;
-            }
-
-            // Handle nested custom objects recursively
-            if (value.GetType().IsClass && value.GetType() != typeof(string))
-            {
-                return ClassToDictionary(value);
-            }
-
-            return value?.ToString(); // Fallback for unhandled types
-        }
-    }
 
 
     public ParseLiveQueryClient() : this(GetDefaultUri()) { }
@@ -511,7 +281,7 @@ public class ParseLiveQueryClient
         return _taskQueue.Enqueue(() => ParseMessage(message));
     }
 
-    private IDictionary<string, object> ConvertJsonElements(Dictionary<string, JsonElement> jsonElementDict)
+    private Dictionary<string, object> ConvertJsonElements(Dictionary<string, JsonElement> jsonElementDict)
     {
         var result = new Dictionary<string, object>();
 
@@ -803,3 +573,234 @@ public interface IWebSocketClientCallback
 }
 
 
+
+public static class ObjectMapper
+{
+    /// <summary>
+    /// Maps values from a dictionary to an instance of type T.
+    /// Logs any keys that don't match properties in T.
+    ///     
+    /// Helper to Map from Parse Dictionnary Response to Model
+    /// Example usage TestChat chat = ObjectMapper.MapFromDictionary<TestChat>(objData);    
+    /// </summary>
+    public static T MapFromDictionary<T>(IDictionary<string, object> source) where T : class
+    {
+        try
+        {
+            // Attempt to create an instance of T using Activator.CreateInstance
+            // This will return null if T doesn't have a parameterless constructor (or if it's abstract)
+            T target = (T)Activator.CreateInstance(typeof(T));
+
+            if (target == null)
+            {
+                Debug.WriteLine($"Warning: Could not create an instance of {typeof(T).Name}. Ensure it has a public parameterless constructor.");
+                return null; // Return null if instantiation fails
+            }
+
+            // Get all writable properties of T
+            var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.CanWrite)
+                .ToDictionary(p => p.Name, p => p, StringComparer.OrdinalIgnoreCase);
+
+            // Track unmatched keys
+            List<string> unmatchedKeys = new();
+
+            foreach (var kvp in source)
+            {
+                if (properties.TryGetValue(kvp.Key, out var property))
+                {
+                    try
+                    {
+                        // Convert and assign the value to the property
+                        if (kvp.Value != null && property.PropertyType.IsAssignableFrom(kvp.Value.GetType()))
+                        {
+                            property.SetValue(target, kvp.Value);
+                        }
+                        else if (kvp.Value != null)
+                        {
+                            // Attempt conversion for non-directly assignable types
+                            var convertedValue = Convert.ChangeType(kvp.Value, property.PropertyType);
+                            property.SetValue(target, convertedValue);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Failed to set property {property.Name} on {typeof(T).Name}: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    // Log unmatched keys
+                    unmatchedKeys.Add(kvp.Key);
+                }
+            }
+
+            // Log keys that don't match
+            if (unmatchedKeys.Count > 0)
+            {
+                Debug.WriteLine($"Unmatched Keys for {typeof(T).Name}:");
+                foreach (var key in unmatchedKeys)
+                {
+                    Debug.WriteLine($"- {key}");
+                }
+            }
+
+            return target;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error creating instance of {typeof(T).Name}: {ex.Message}");
+            return null; // Return null if any error occurs during instantiation
+        }
+    }
+
+    public static Dictionary<string, object> ClassToDictionary<T>(T obj) where T : class
+    {
+        if (obj == null)
+        {
+            return null;
+        }
+
+        var dictionary = new Dictionary<string, object>();
+        var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+        foreach (var property in properties)
+        {
+            string name = property.Name;
+            object value = property.GetValue(obj);
+
+            if (value != null)
+            {
+                dictionary[name] = ConvertValueForDictionary(value);
+            }
+        }
+
+        return dictionary;
+    }
+
+    private static object ConvertValueForDictionary(object value)
+    {
+        if (value == null)
+        {
+            return null;
+        }
+
+        // Handle Parse specific types first for efficiency
+
+        // ParseObject (for Pointers)
+        if (value is ParseObject parseObject && !string.IsNullOrEmpty(parseObject.ObjectId))
+        {
+            return new Dictionary<string, object>
+            {
+                { "__type", "Pointer" },
+                { "className", parseObject.ClassName },
+                { "objectId", parseObject.ObjectId }
+            };
+        }
+
+        // ParseFile
+        if (value is ParseFile parseFile && !string.IsNullOrEmpty(parseFile.Name) && parseFile.DataStream != null)
+        {
+            using var memoryStream = new MemoryStream();
+            parseFile.DataStream.CopyTo(memoryStream);
+            return new Dictionary<string, object>
+            {
+                { "__type", "File" },
+                { "name", parseFile.Name },
+                // URL is typically not set on a new ParseFile, so we rely on the data
+                { "_ContentType", parseFile.MimeType }, // Optional, but good to include
+                { "_Base64", Convert.ToBase64String(memoryStream.ToArray()) }
+            };
+        }
+
+        // ParseGeoPoint
+        if (value is ParseGeoPoint geoPoint)
+        {
+            return new Dictionary<string, object>
+            {
+                { "__type", "GeoPoint" },
+                { "latitude", geoPoint.Latitude },
+                { "longitude", geoPoint.Longitude }
+            };
+        }
+
+        //// ParseRelation (Asynchronous)
+        //if (value is ParseRelation<ParseObject> relation)
+        //{
+        //    var targetObjects = await relation.Query.FindAsync();
+        //    return targetObjects.Select(obj => new Dictionary<string, object>
+        //    {
+        //        { "__type", "Pointer" },
+        //        { "className", obj.ClassName },
+        //        { "objectId", obj.ObjectId }
+        //    }).ToList<object>();
+        //}
+        Type valueType = value.GetType();
+
+        if (valueType.IsPrimitive || value is string)
+        {
+            return value;
+        }
+
+        if (value is DateTime dateTime)
+        {
+            return new Dictionary<string, object>
+            {
+                { "__type", "Date" },
+                { "iso", dateTime.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ") }
+            };
+        }
+
+        if (value is byte[] byteArray)
+        {
+            return new Dictionary<string, object>
+            {
+                { "__type", "Bytes" },
+                { "base64", Convert.ToBase64String(byteArray) }
+            };
+        }
+
+        if (value is Stream stream)
+        {
+            using var memoryStream = new MemoryStream();
+            stream.CopyTo(memoryStream);
+            return new Dictionary<string, object>
+            {
+                { "__type", "Bytes" },
+                { "base64", Convert.ToBase64String(memoryStream.ToArray()) }
+            };
+        }
+
+        if (value is IList list) // Handle generic IList
+        {
+            if (list is not null)
+            {
+                var convertedList = new List<object>();
+                foreach (var item in list)
+                {
+                    convertedList.Add(ConvertValueForDictionary(item));
+                }
+
+                return convertedList;
+            }
+        }
+
+        if (value is IDictionary dictionary)
+        {
+            var convertedDictionary = new Dictionary<string, object>();
+            foreach (var key in dictionary.Keys)
+            {
+                convertedDictionary[key.ToString()] = ConvertValueForDictionary(dictionary[key]);
+            }
+            return convertedDictionary;
+        }
+
+        // Handle nested custom objects recursively
+        if (value.GetType().IsClass && value.GetType() != typeof(string))
+        {
+            return ClassToDictionary(value);
+        }
+
+        return value?.ToString(); // Fallback for unhandled types
+    }
+}

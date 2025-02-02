@@ -202,7 +202,10 @@ public class ParseQuery<T> where T : ParseObject
     /// all <see cref="ParseObject"/>s of the provided class.
     /// </summary>
     /// <param name="className">The name of the class to retrieve ParseObjects for.</param>
-    public ParseQuery(IServiceHub serviceHub, string className) => (ClassName, Services) = (className ?? throw new ArgumentNullException(nameof(className), "Must specify a ParseObject class name when creating a ParseQuery."), serviceHub);
+    public ParseQuery(IServiceHub serviceHub, string className)
+    {
+        (ClassName, Services) = (className ?? throw new ArgumentNullException(nameof(className), "Must specify a ParseObject class name when creating a ParseQuery."), serviceHub);
+    }
 
     #region Order By
 

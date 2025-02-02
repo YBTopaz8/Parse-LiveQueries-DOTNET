@@ -16,9 +16,10 @@ public static class UserServiceExtensions
     }
 
 
+
     // DONE: Consider renaming SignUpAsync and LogInAsync to SignUpWithAsync and LogInWithAsync, respectively.
     // DONE: Consider returning the created user from the SignUpAsync overload that accepts a username and password.
-    
+
     /// <summary>
     /// Creates a new <see cref="ParseUser"/>, saves it with the target Parse Server instance, and then authenticates it on the target client.
     /// </summary>
@@ -26,11 +27,12 @@ public static class UserServiceExtensions
     /// <param name="username">The value that should be used for <see cref="ParseUser.Username"/>.</param>
     /// <param name="password">The value that should be used for <see cref="ParseUser.Password"/>.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    public static Task SignUpWithAsync(this IServiceHub serviceHub, string username, string password, CancellationToken cancellationToken = default)
+    public static async Task<ParseUser> SignUpWithAsync(this IServiceHub serviceHub, string username, string password, CancellationToken cancellationToken = default)
     {
-        var ee = new ParseUser { Services = serviceHub, Username = username, Password = password };
-        return ee.SignUpAsync(cancellationToken);
-        
+        var user = new ParseUser { Services = serviceHub, Username = username, Password = password };
+        var signedUpUser = await user.SignUpAsync(cancellationToken);
+
+        return signedUpUser;
     }
 
     /// <summary>
@@ -61,10 +63,10 @@ public static class UserServiceExtensions
             .ConfigureAwait(false);
 
         // Generate the ParseUser object from the returned state
-        var user = serviceHub.GenerateObjectFromState<ParseUser>(userState, "_User");
+        ParseUser user = serviceHub.GenerateObjectFromState<ParseUser>(userState, "_User");
 
         // Save the user locally
-        await SaveAndReturnCurrentUserAsync(serviceHub, user).ConfigureAwait(false);
+        await SaveAndReturnCurrentUserAsync(serviceHub, user, cancellationToken).ConfigureAwait(false);
 
         // Set the authenticated user as the current instance
         InstanceUser = user;

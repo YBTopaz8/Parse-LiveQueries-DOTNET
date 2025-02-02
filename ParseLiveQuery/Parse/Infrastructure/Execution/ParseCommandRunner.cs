@@ -79,6 +79,22 @@ public class ParseCommandRunner : IParseCommandRunner
         {
             
         }
+        else if (responseCode == 201)
+        {
+            // Created
+        }
+        else if (responseCode == 400)
+        {
+            throw new ParseFailureException(ParseFailureException.ErrorCode.BadRequest, content);
+        }
+        else if (responseCode == 401)
+        {
+            throw new ParseFailureException(ParseFailureException.ErrorCode.ObjectNotFound, content);
+        }
+        else if (responseCode == 403)
+        {
+            throw new ParseFailureException(ParseFailureException.ErrorCode.OperationForbidden, content);
+        }
         else if (responseCode == 404)
         {
             throw new ParseFailureException(ParseFailureException.ErrorCode.ERROR404, "Error 404");

@@ -80,7 +80,7 @@ public class UniversalWebClient : IWebClient
         HttpResponseMessage response = await Client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         uploadProgress.Report(new DataTransferLevel { Amount = 1 });
-        response.EnsureSuccessStatusCode();
+        //response.EnsureSuccessStatusCode();
 
         long? totalLength = response.Content.Headers.ContentLength;
 
