@@ -30,6 +30,8 @@ public class ParseLiveQueryClient
     private bool _userInitiatedDisconnect;
     private bool _hasReceivedConnected;
 
+    private readonly ConcurrentDictionary<string, Subscription> _namedSubscriptions = new();
+    public IReadOnlyDictionary<string, Subscription> NamedSubscriptions => _namedSubscriptions;
     // Use ConcurrentDictionary for thread-safe operations on subscriptions
     private readonly ConcurrentDictionary<int, Subscription> _subscriptions = new();
     public IReadOnlyDictionary<int, Subscription> Subscriptions => _subscriptions;
@@ -85,18 +87,46 @@ public class ParseLiveQueryClient
         }.Uri;
     }
 
+    /// <summary>
+    /// Gets a subscription by its client-side name. Returns null if not found.
+    /// If multiple subscriptions have the same name (overwrite strategy), returns the latest one.
+    /// </summary>
+    public Subscription? GetSubscriptionByName(string subscriptionName)
+    {
+        _namedSubscriptions.TryGetValue(subscriptionName, out var subscription);
+        return subscription; // Will be null if not found
+    }
+
+    /// <summary>
+    /// Gets all subscriptions that have the specified client-side name.
+    /// In the current implementation (overwrite strategy), this will return a list with at most one subscription.
+    /// </summary>
+    public List<Subscription> GetSubscriptionsByName(string subscriptionName)
+    {
+        if (_namedSubscriptions.TryGetValue(subscriptionName, out var subscription))
+        {
+            return new List<Subscription> { subscription };
+        }
+        return new List<Subscription>(); // Return empty list if not found
+    }
 
     /// <summary>
     /// Subscribes to a specified Parse query to receive real-time updates 
     /// for Create, Update, Delete, and other events on objects matching the query.
     /// </summary>
-    public Subscription<T> Subscribe<T>(ParseQuery<T> query) where T : ParseObject
+    public Subscription<T> Subscribe<T>(ParseQuery<T> query, string? SubscriptionName=null) where T : ParseObject
     {
 
         // Create Subscription object
         var requestId = _requestIdCount++;
         var subscription = _subscriptionFactory.CreateSubscription(requestId, query);
-
+        if (!string.IsNullOrEmpty(SubscriptionName))
+        {
+            subscription.Name = SubscriptionName;
+            
+            _namedSubscriptions.AddOrUpdate(SubscriptionName, subscription, (name, oldSubscription) => subscription); // Overwrite if name exists
+            
+        }
         // Add to subscriptions collection
         _subscriptions.TryAdd(requestId, subscription);
 
@@ -164,8 +194,14 @@ public class ParseLiveQueryClient
             // Invoke the method
             genericMethod.Invoke(this, new[] { subscription });
 
-            // Remove the subscription
-            _subscriptions.TryRemove(sub.Key, out _);
+            if (_subscriptions.TryRemove(sub.Key, out _))
+            {
+                // **NEW**: Remove from named subscriptions if it has a name
+                if (!string.IsNullOrEmpty(subscription.Name))
+                {
+                    _namedSubscriptions.TryRemove(subscription.Name, out _);
+                }
+            }
         }
     }
 
@@ -202,7 +238,15 @@ public class ParseLiveQueryClient
 
         foreach (var requestId in requestIdsToRemove)
         {
-            _subscriptions.TryRemove(requestId, out _); // Ignore out parameter, value already in sub
+            if (_subscriptions.TryRemove(requestId, out var removedSubscription)) // Capture removed subscription
+            {
+                // **NEW**: Remove from named subscriptions if it has a name
+                if (removedSubscription != null && !string.IsNullOrEmpty(removedSubscription.Name))
+                {
+                    _namedSubscriptions.TryRemove(removedSubscription.Name, out _);
+                }
+            }
+            //_subscriptions.TryRemove(requestId, out _); // Ignore out parameter, value already in sub
         }
     }
 
@@ -384,10 +428,16 @@ public class ParseLiveQueryClient
 
     private void HandleUnsubscribedEvent(IDictionary<string, object> jsonObject)
     {
-        if (jsonObject.TryGetValue("requestId", out var requestIdObj) &&
-            requestIdObj is int requestId &&
-                _subscriptions.TryRemove(requestId, out var subscription))
+        if (jsonObject.TryGetValue("requestId", out var requestIdObj) 
+            &&
+            requestIdObj is int requestId 
+            &&
+            _subscriptions.TryRemove(requestId, out var subscription))
         {
+            if (subscription != null && !string.IsNullOrEmpty(subscription.Name))
+            {
+                _namedSubscriptions.TryRemove(subscription.Name, out _);
+            }
             subscription.DidUnsubscribe(subscription.QueryObj);
             _unsubscribedSubject.OnNext((requestId, subscription));
         }

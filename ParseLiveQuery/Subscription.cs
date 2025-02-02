@@ -27,12 +27,15 @@ public class Subscription<T> : Subscription where T : ParseObject
     internal ParseQuery<T> Query { get; }
 
     internal override object QueryObj => Query;
+    //public string Name { get; set; } // Nullable string for optional name
 
     // Observable streams for LINQ usage
     public IQbservable<SubscriptionEvent<T>> Events => _eventStream.AsQbservable();
     public IQbservable<LiveQueryException> Errors => _errorStream.AsQbservable();
     public IQbservable<ParseQuery<T>> Subscribes => _subscribeStream.AsQbservable();
     public IQbservable<ParseQuery<T>> Unsubscribes => _unsubscribeStream.AsQbservable();
+
+    internal override string Name { get; set; }
 
     internal override void DidReceive(object queryObj, Event objEvent, IObjectState objState)
     {
@@ -86,6 +89,7 @@ public class SubscriptionEvent<T> where T : ParseObject
 public abstract class Subscription
 {
     internal abstract object QueryObj { get; }
+    internal abstract string Name { get; set; }
 
     internal abstract void DidReceive(object queryObj, Event objEvent, IObjectState obj);
 
@@ -107,42 +111,4 @@ public abstract class Subscription
     }
 
 
-    private class TaskQueueWrapper : ITaskQueue
-    {
-        private readonly TaskQueue _underlying = new();
-
-        public async Task Enqueue(Action taskStart)
-        {
-            await _underlying.Enqueue(async _ =>
-            {
-                taskStart();
-                await Task.CompletedTask;
-            }, CancellationToken.None);
-        }
-
-        public async Task EnqueueOnSuccess<TIn>(Task<TIn> task, Func<Task<TIn>, Task> onSuccess)
-        {
-            try
-            {
-                await task.ConfigureAwait(false);
-                await onSuccess(task).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException("Error in EnqueueOnSuccess", ex);
-            }
-        }
-
-        public async Task EnqueueOnError(Task task, Action<Exception> onError)
-        {
-            try
-            {
-                await task.ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                onError(ex);
-            }
-        }
-    }
 }
