@@ -13,16 +13,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Fetch all history for tags
+          fetch-depth: 0  # Fetch all history for tags
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '9.0' # Or the highest version you want to ensure is present
+          dotnet-version: '9.0'  # Highest version you want
 
       - name: Update Workloads
         run: dotnet workload update
-        
+
       - name: Restore dependencies
         run: dotnet restore
 
@@ -31,11 +31,23 @@ jobs:
 
       - name: Get NuGet package version from tag
         id: get_version
-        run: echo "NUGET_VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')" >> $env:GITHUB_OUTPUT
+        run: |
+          echo "NUGET_VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')" >> $env:GITHUB_OUTPUT
+          echo "Version is ${{ steps.get_version.outputs.NUGET_VERSION }}"
 
       - name: Pack NuGet package
         run: dotnet pack --configuration Release -o . /p:Version=${{ steps.get_version.outputs.NUGET_VERSION }}
+
       - name: Push NuGet package to NuGet.org
         if: startsWith(github.ref, 'refs/heads/master')
-        run: dotnet nuget push "*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push "*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
         working-directory: .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.NUGET_VERSION }}
+          name: Release ${{ steps.get_version.outputs.NUGET_VERSION }}
+          body: "Automated release for version ${{ steps.get_version.outputs.NUGET_VERSION }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
