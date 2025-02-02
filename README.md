@@ -1,6 +1,33 @@
 # Parse-Live-Query-Unofficial v3 (with RX and LINQ Support)
 
 # Grab the Nuget Here: [![Nuget](https://img.shields.io/nuget/v/yb.parselivequerydotnet.svg)](https://www.nuget.org/packages/YB.ParseLiveQueryDotNet)
+
+# v3.1.0 🏷️ Name Your LiveQuery Subscriptions!
+
+✨ Super handy update! That Completely fixes Parse Relations and Operations & You can now NAME your LiveQuery subscriptions! ✨
+
+- Fixed all Parse Relation - related issued 
+
+Give your subscriptions meaningful names to make managing them in your code WAY easier! 
+
+**What's New:**
+
+- Name Your Subs:  Use `LiveClient.Subscribe(query, "MySubscriptionName")` to give your subscriptions client-side names.
+- Find Subs by Name: Quickly get your subscriptions back using `LiveClient.GetSubscriptionByName("MySubscriptionName")`.
+
+## Why Name them? 🤔
+
+- Keep Organized: Easily track different subscriptions, especially in bigger apps.
+- Easy Access: Grab the exact subscription you need by name, no more digging through lists!
+- Code Clarity Make your LiveQuery code cleaner and easier to understand.
+
+ No Breaking Changes! 👍 
+Just a smooth, helpful update. Your existing LiveQuery code will keep working perfectly.
+
+Let me know what you think on GitHub!
+
+🚀 Happy Coding! 🚀
+
 # v3.0.1 - QOL update 🎇
 ## It's no longer REQUIRED to be logged in order to connect to LQ.  
 Any client device can connect to Live Queries independently
