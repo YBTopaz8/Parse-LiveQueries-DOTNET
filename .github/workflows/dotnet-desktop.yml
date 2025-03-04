@@ -18,7 +18,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '9.0'  # Or the highest .NET SDK version you need
+          dotnet-version: '9.0'
 
       - name: Update Workloads
         run: dotnet workload update
@@ -37,12 +37,16 @@ jobs:
 
       - name: Get Commit/PR Message
         id: get_message
+        shell: pwsh  # Explicitly specify PowerShell
         run: |
-          if [ "${{ github.event.pull_request }}" != "" ]; then  # Check if it's a PR merge
-            echo "RELEASE_MESSAGE=$(gh pr view ${{ github.event.pull_request.number }} --json title,body -q '.title' && echo "" && gh pr view ${{ github.event.pull_request.number }} --json body -q '.body')" >> $env:GITHUB_OUTPUT
-          else  # It's a direct commit to master
+          if ($env:GITHUB_EVENT_PATH -and (Get-Content $env:GITHUB_EVENT_PATH | ConvertFrom-Json).pull_request) {
+            $prNumber = (Get-Content $env:GITHUB_EVENT_PATH | ConvertFrom-Json).pull_request.number
+            $prTitle = gh pr view $prNumber --json title -q '.title'
+            $prBody = gh pr view $prNumber --json body -q '.body'
+            echo "RELEASE_MESSAGE=$($prTitle)`n$($prBody)" >> $env:GITHUB_OUTPUT
+          } else {
             echo "RELEASE_MESSAGE=$(git log -1 --pretty=%B)" >> $env:GITHUB_OUTPUT
-          fi
+          }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -57,14 +61,15 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.get_version.outputs.NUGET_VERSION }}  #Prepend 'v'
-          name: Release v${{ steps.get_version.outputs.NUGET_VERSION }} #Prepend 'v'
-          body: ${{ steps.get_message.outputs.RELEASE_MESSAGE }} # Use the commit/PR message
+          tag_name: v${{ steps.get_version.outputs.NUGET_VERSION }}
+          name: Release v${{ steps.get_version.outputs.NUGET_VERSION }}
+          body: ${{ steps.get_message.outputs.RELEASE_MESSAGE }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install GitHub CLI
-        if: github.event.pull_request != null #Only install if needed
+      - name: Install GitHub CLI  # Moved after Get Commit/PR Message
+        shell: bash #  Install using bash.
+        if: ${{ github.event.pull_request != null }}
         run: |
           type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
           curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
