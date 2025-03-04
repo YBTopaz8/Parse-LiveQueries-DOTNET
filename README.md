@@ -2,6 +2,52 @@
 
 # Grab the Nuget Here: [![Nuget](https://img.shields.io/nuget/v/yb.parselivequerydotnet.svg)](https://www.nuget.org/packages/YB.ParseLiveQueryDotNet)
 
+# **v3.2.0: Robust LiveQuery Client with Enhanced Reliability and Stability 🚀**
+
+**Key Enhancements:**
+
+*   **Automatic Reconnection:** Implemented automatic reconnection to the LiveQuery server upon connection loss.
+    *   Features exponential backoff with configurable retries.
+    *   Reports reconnection attempts and failures via the `OnError` observable.
+
+*   **Heartbeat (Ping/Pong):** Integrated WebSocket Ping/Pong frames for robust connection health monitoring.
+    *   Detects and recovers from "dead" connections, enhancing stability.
+
+*   **Configurable Receive Buffer:** Added ability to customize the WebSocket receive buffer size.
+    *   Useful for handling large messages.
+    *   Utilize: `new WebSocketClient(uri, callback, bufferSize);`
+
+*   **Refactored WebSocket Handling:**
+    *   Complete rewrite for improved stability, error handling, and performance.
+    *   Ensures proper resource disposal (`Dispose()`) to prevent memory leaks.
+    *   Provides clear and consistent WebSocket connection state management.
+    *   Includes placeholder for binary message handling.
+    *   Allows control over WebSocket close status and description.
+
+*   **Optimized Subscription Management:**
+    *   Simplified unsubscription process.
+    *   Ensures thread-safe subscription operations.
+    *   Removed reflection for enhanced performance.
+
+*   **Full `IDisposable` Implementation:** `ParseLiveQueryClient`, `WebSocketClient`, and `Subscription` classes now fully implement `IDisposable`.
+    *   Guarantees proper resource cleanup.
+
+*   **Enhanced Error Handling:** Improved error handling with more informative exceptions and events.
+
+*   **Optimized JSON Handling:** Enhanced JSON serialization/deserialization.
+
+**Breaking Changes:**
+
+*   None.  This release maintains backward compatibility with v3.1.0. Thorough testing is still strongly recommended.
+
+**Upgrade Notes:**
+
+*   Thorough application testing is highly recommended after upgrading due to significant internal improvements.
+*   New features (reconnection, buffer size) are optional and do not require code changes to maintain existing functionality.
+
+**Happy Coding! 👋🏾**
+
+
 # v3.1.0 🏷️ Name Your LiveQuery Subscriptions!
 
 ✨ Super handy update! That Completely fixes Parse Relations and Operations & You can now NAME your LiveQuery subscriptions! ✨
