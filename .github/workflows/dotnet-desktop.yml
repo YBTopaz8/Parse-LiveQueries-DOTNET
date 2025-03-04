@@ -29,10 +29,24 @@ jobs:
       - name: Build project
         run: dotnet build --configuration Release
 
-      - name: Get NuGet package version from tag
+      - name: Get Next NuGet Version
         id: get_version
+        shell: pwsh
         run: |
-          echo "NUGET_VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')" >> $env:GITHUB_OUTPUT
+          $currentVersion = git describe --tags --abbrev=0 | % { $_ -replace '^v', '' }
+          if (-not $currentVersion) {  # Handle the case where there are no tags yet
+              $nextVersion = "0.1.0" # Start with 0.1.0 if no tags
+          } else {
+              $versionParts = $currentVersion.Split('.')
+              $major = [int]$versionParts[0]
+              $minor = [int]$versionParts[1]
+              $patch = [int]$versionParts[2]
+
+              $minor += 1 # Increment the minor version
+
+              $nextVersion = "$major.$minor.0"
+          }
+          echo "NUGET_VERSION=$nextVersion" >> $env:GITHUB_OUTPUT
           echo "Version is ${{ steps.get_version.outputs.NUGET_VERSION }}"
 
       - name: Get Commit/PR Message
@@ -57,15 +71,6 @@ jobs:
         if: startsWith(github.ref, 'refs/heads/master')
         run: dotnet nuget push "*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
         working-directory: .
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ steps.get_version.outputs.NUGET_VERSION }}
-          name: Release v${{ steps.get_version.outputs.NUGET_VERSION }}
-          body: ${{ steps.get_message.outputs.RELEASE_MESSAGE }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install GitHub CLI  # Moved after Get Commit/PR Message
         shell: bash #  Install using bash.
