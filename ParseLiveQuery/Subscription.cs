@@ -18,17 +18,10 @@ public class Subscription<T> : Subscription where T : ParseObject
 
     internal Subscription(int requestId, ParseQuery<T> query)
     {
-        RequestId = requestId;
-        Query = query;
+        RequestID = requestId;
+        QueryObj = query;
     }
-
-    public int RequestId { get; }
-
-    internal ParseQuery<T> Query { get; }
-
-    internal override object QueryObj => Query;
-    //public string Name { get; set; } // Nullable string for optional name
-
+    
     // Observable streams for LINQ usage
     public IQbservable<SubscriptionEvent<T>> Events => _eventStream.AsQbservable();
     public IQbservable<LiveQueryException> Errors => _errorStream.AsQbservable();
@@ -67,7 +60,23 @@ public class Subscription<T> : Subscription where T : ParseObject
 
     internal override IClientOperation CreateSubscribeClientOperation(string sessionToken = null)
     {
+        
         return new SubscribeClientOperation<T>(this, sessionToken);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            
+            _eventStream.Dispose();
+            _errorStream.Dispose();
+            _subscribeStream.Dispose();
+            _unsubscribeStream.Dispose();
+        }
+        
+        base.Dispose(disposing);
+
     }
 }
 
@@ -86,10 +95,12 @@ public class SubscriptionEvent<T> where T : ParseObject
     public T Object { get; }
 }
 
-public abstract class Subscription
+public abstract class Subscription : IDisposable
 {
-    internal abstract object QueryObj { get; }
-    internal abstract string Name { get; set; }
+    
+    internal protected object QueryObj { get; set; }
+    internal protected int RequestID { get; set; }
+    internal virtual string Name { get; set; } 
 
     internal abstract void DidReceive(object queryObj, Event objEvent, IObjectState obj);
 
@@ -110,5 +121,24 @@ public abstract class Subscription
         Delete
     }
 
+    // Dispose Pattern
+    private bool _disposed = false;
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                // No managed resources to dispose in the base class directly.
+                // Derived classes will handle their own Subjects.
+            }
 
+            _disposed = true;
+        }
+    }
 }

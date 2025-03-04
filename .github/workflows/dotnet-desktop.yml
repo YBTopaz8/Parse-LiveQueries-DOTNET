@@ -13,12 +13,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Fetch all history for tags
+          fetch-depth: 0  # Fetch all history for tags and commit messages
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '9.0'  # Highest version you want
+          dotnet-version: '9.0'  # Or the highest .NET SDK version you need
 
       - name: Update Workloads
         run: dotnet workload update
@@ -35,6 +35,17 @@ jobs:
           echo "NUGET_VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')" >> $env:GITHUB_OUTPUT
           echo "Version is ${{ steps.get_version.outputs.NUGET_VERSION }}"
 
+      - name: Get Commit/PR Message
+        id: get_message
+        run: |
+          if [ "${{ github.event.pull_request }}" != "" ]; then  # Check if it's a PR merge
+            echo "RELEASE_MESSAGE=$(gh pr view ${{ github.event.pull_request.number }} --json title,body -q '.title' && echo "" && gh pr view ${{ github.event.pull_request.number }} --json body -q '.body')" >> $env:GITHUB_OUTPUT
+          else  # It's a direct commit to master
+            echo "RELEASE_MESSAGE=$(git log -1 --pretty=%B)" >> $env:GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Pack NuGet package
         run: dotnet pack --configuration Release -o . /p:Version=${{ steps.get_version.outputs.NUGET_VERSION }}
 
@@ -46,8 +57,18 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.get_version.outputs.NUGET_VERSION }}
-          name: Release ${{ steps.get_version.outputs.NUGET_VERSION }}
-          body: "Automated release for version ${{ steps.get_version.outputs.NUGET_VERSION }}"
+          tag_name: v${{ steps.get_version.outputs.NUGET_VERSION }}  #Prepend 'v'
+          name: Release v${{ steps.get_version.outputs.NUGET_VERSION }} #Prepend 'v'
+          body: ${{ steps.get_message.outputs.RELEASE_MESSAGE }} # Use the commit/PR message
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install GitHub CLI
+        if: github.event.pull_request != null #Only install if needed
+        run: |
+          type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+          && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+          && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+          && sudo apt update \
+          && sudo apt install gh -y

@@ -15,8 +15,8 @@ public class SubscribeClientOperation<T> : SessionClientOperation where T : Pars
 
     internal SubscribeClientOperation(Subscription<T> subscription, string sessionToken) : base(sessionToken)
     {
-        _requestId = subscription.RequestId;
-        _query = new ExtendedParseQuery<T>(subscription.Query);
+        _requestId = subscription.RequestID;
+        _query = new ExtendedParseQuery<T>((ParseQuery<T>)subscription.QueryObj);
     }
 
     protected override IDictionary<string, object> ToJsonObject()

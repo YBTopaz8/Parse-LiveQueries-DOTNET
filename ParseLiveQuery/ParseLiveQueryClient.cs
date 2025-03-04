@@ -16,8 +16,10 @@ using System.Linq;
 using System.Collections;
 
 namespace Parse.LiveQuery;
-public class ParseLiveQueryClient
+public class ParseLiveQueryClient :IDisposable
 {
+    private bool _disposed;
+
     private readonly Uri _hostUri;
     private readonly string _applicationId;
     private readonly string _clientKey;
@@ -91,7 +93,7 @@ public class ParseLiveQueryClient
     /// Gets a subscription by its client-side name. Returns null if not found.
     /// If multiple subscriptions have the same name (overwrite strategy), returns the latest one.
     /// </summary>
-    public Subscription? GetSubscriptionByName(string subscriptionName)
+    public Subscription GetSubscriptionByName(string subscriptionName)
     {
         _namedSubscriptions.TryGetValue(subscriptionName, out var subscription);
         return subscription; // Will be null if not found
@@ -173,30 +175,23 @@ public class ParseLiveQueryClient
 
     public void RemoveAllSubscriptions()
     {
+        ThrowIfDisposed();
         if (_subscriptions is null || _subscriptions.IsEmpty)
         {
             return;
         }
 
         // Capture a thread-safe snapshot of the subscriptions
-        var subscriptionsToRemove = _subscriptions.ToArray();
-
-        foreach (var sub in subscriptionsToRemove)
+        foreach (var pair in _subscriptions)
         {
-            // Get the actual subscription object
-            var subscription = sub.Value;
+            var requestId = pair.Key;
+            var subscription = pair.Value;
 
-            var subscriptionType = subscription.GetType();
-            var genericMethod = typeof(ParseLiveQueryClient)
-                .GetMethod("SendUnsubscription")
-                .MakeGenericMethod(subscriptionType.GenericTypeArguments[0]);
+            // Use the non-generic SendUnsubscription
+            SendUnsubscription(subscription);
 
-            // Invoke the method
-            genericMethod.Invoke(this, new[] { subscription });
-
-            if (_subscriptions.TryRemove(sub.Key, out _))
+            if (_subscriptions.TryRemove(requestId, out _))
             {
-                // **NEW**: Remove from named subscriptions if it has a name
                 if (!string.IsNullOrEmpty(subscription.Name))
                 {
                     _namedSubscriptions.TryRemove(subscription.Name, out _);
@@ -222,31 +217,23 @@ public class ParseLiveQueryClient
     // Private method to centralize unsubscription logic
     private void RemoveSubscriptions<T>(ParseQuery<T> query, Subscription<T> specificSubscription) where T : ParseObject
     {
-        var requestIdsToRemove = new List<int>();
+        ThrowIfDisposed();
 
-        foreach (var pair in _subscriptions)
+        var subscriptionsToRemove = _subscriptions.Where(pair =>
+            query.Equals(pair.Value.QueryObj) && (specificSubscription == null || specificSubscription.Equals(pair.Value))
+        ).ToList();
+
+        foreach (var pair in subscriptionsToRemove)
         {
-            var requestId = pair.Key;
-            var sub = pair.Value;
-
-            if (query.Equals(sub.QueryObj) && (specificSubscription == null || specificSubscription.Equals(sub)))
+            // Use the non-generic SendUnsubscription.
+            SendUnsubscription(pair.Value);
+            if (_subscriptions.TryRemove(pair.Key, out var removedSubscription))
             {
-                SendUnsubscription((Subscription<T>)sub); // Cast here for unsubscription
-                requestIdsToRemove.Add(requestId);
-            }
-        }
-
-        foreach (var requestId in requestIdsToRemove)
-        {
-            if (_subscriptions.TryRemove(requestId, out var removedSubscription)) // Capture removed subscription
-            {
-                // **NEW**: Remove from named subscriptions if it has a name
-                if (removedSubscription != null && !string.IsNullOrEmpty(removedSubscription.Name))
+                if (!string.IsNullOrEmpty(removedSubscription.Name))
                 {
                     _namedSubscriptions.TryRemove(removedSubscription.Name, out _);
                 }
             }
-            //_subscriptions.TryRemove(requestId, out _); // Ignore out parameter, value already in sub
         }
     }
 
@@ -295,9 +282,9 @@ public class ParseLiveQueryClient
     }
 
 
-    private void SendUnsubscription<T>(Subscription<T> subscription) where T : ParseObject
+    private void SendUnsubscription(Subscription subscription)
     {
-        SendOperationAsync(new UnsubscribeClientOperation(subscription.RequestId));
+        SendOperationAsync(new UnsubscribeClientOperation(subscription.RequestID));
     }
 
 
@@ -540,7 +527,52 @@ public class ParseLiveQueryClient
 
     private void OnWebSocketError(Exception exception) => _errorSubject.OnNext(new LiveQueryException.UnknownException("Socket error", exception));
 
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            // Dispose managed resources (Rx Subjects, WebSocketClient)
+            Disconnect();
+            RemoveAllSubscriptions();
+
+            _connectedSubject.Dispose();
+            _disconnectedSubject.Dispose();
+            _errorSubject.Dispose();
+            _subscribedSubject.Dispose();
+            _unsubscribedSubject.Dispose();
+            _objectEventSubject.Dispose();
+
+            // The WebSocketClient itself might not be IDisposable,
+            // but if it has a Close() or similar method, call it here.
+            _webSocketClient?.Close();
+
+            _subscriptions.Clear();
+            _namedSubscriptions.Clear();
+        }
+
+        // Dispose unmanaged resources (if any).  Likely none in this case.
+
+        _disposed = true;
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(ParseLiveQueryClient));
+        }
+    }
     private class WebSocketClientCallback : IWebSocketClientCallback
     {
         private readonly ParseLiveQueryClient _client;
