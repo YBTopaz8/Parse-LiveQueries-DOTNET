@@ -74,7 +74,7 @@ jobs:
         id: get_release_notes
         shell: bash
         run: |
-          releaseNotes=$(cat releasenotes.md)
+          releaseNotes=$(cat ParseLiveQuery/docs/ReleaseNotes.md)  # Corrected path
           echo "RELEASE_NOTES<<EOF" >> "$GITHUB_OUTPUT"
           echo "$releaseNotes" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
