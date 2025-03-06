@@ -80,8 +80,10 @@ jobs:
           echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Pack NuGet package
-        run: dotnet pack --configuration Release -o . /p:Version=${{ steps.get_version.outputs.NUGET_VERSION }} /p:PackageReleaseNotes="$(echo ${{ steps.get_release_notes.outputs.RELEASE_NOTES }} | sed -e 's/["\$`\\]/\\&/g')" #Escape properly.
-        
+        run: |
+          release_notes_escaped=$(sed -e 's/["\$`\\]/\\&/g' <<< "${{ steps.get_release_notes.outputs.RELEASE_NOTES }}")
+          dotnet pack --configuration Release -o . /p:Version=${{ steps.get_version.outputs.NUGET_VERSION }} /p:PackageReleaseNotes="$release_notes_escaped"
+
       - name: Push NuGet package to NuGet.org
         run: dotnet nuget push "*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
         working-directory: .
