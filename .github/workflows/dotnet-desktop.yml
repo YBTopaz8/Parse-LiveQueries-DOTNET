@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-and-publish:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest  # Use a Linux runner
 
     steps:
       - name: Checkout code
@@ -43,48 +43,46 @@ jobs:
 
       - name: Get Next Version and Create Tag
         id: get_version
-        shell: pwsh
+        shell: bash  # Use bash for git commands
         run: |
           # Get the highest existing tag (if any)
-          $latestTag = git describe --tags --abbrev=0 --match "v*" 2> $null
-          if (-not $latestTag) {
+          latestTag=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null)
+          if [ -z "$latestTag" ]; then
             # If no tags exist, start with 3.4.0
-            $nextVersion = "3.4.0"
-          } else {
+            nextVersion="3.4.0"
+          else
             # If tags exist, increment based on the highest tag
-            $versionParts = ($latestTag -replace '^v', '').Split('.')
-            $major = [int]$versionParts[0]
-            $minor = [int]$versionParts[1]
-            $patch = [int]$versionParts[2]
+            versionParts=(${latestTag//[^0-9.]/})  # Extract numbers and dots
+            IFS='.' read -r -a versionArray <<< "$versionParts"
+            major=${versionArray[0]}
+            minor=${versionArray[1]}
+            patch=${versionArray[2]}
+            # Increment based on the highest tag.
+            if (( major < 3 )) || (( major == 3 && minor < 4 )); then
+                nextVersion="3.4.0" # Force to 3.4.0 if < 3.4.0
+            else
+               ((minor++))
+               nextVersion="$major.$minor.0"
+            fi
+          fi
 
-            #  Increment the minor version, reset patch to 0.  You can change this logic
-            #  to increment patch, major, etc., as needed.
-            if ($major -lt 3 -or ($major -eq 3 -and $minor -lt 4)) {
-              $nextVersion = "3.4.0" # Force 3.4.0 if < 3.4.0
-            } else {
-                $minor++
-                $nextVersion = "$major.$minor.0"
-            }
-          }
-          
           # Create and push the tag
           git tag "v$nextVersion"
           git push origin "v$nextVersion"
 
-          echo "NUGET_VERSION=$nextVersion" >> $env:GITHUB_OUTPUT
-          echo "Version is ${{ steps.get_version.outputs.NUGET_VERSION }}"
+          echo "NUGET_VERSION=$nextVersion" >> "$GITHUB_OUTPUT"
 
       - name: Get Release Notes (from releasenotes.md)
         id: get_release_notes
-        shell: pwsh
+        shell: bash
         run: |
-          $releaseNotes = Get-Content releasenotes.md -Raw
-          echo "RELEASE_NOTES<<EOF" >> $env:GITHUB_OUTPUT
-          echo "$releaseNotes" >> $env:GITHUB_OUTPUT
-          echo "EOF" >> $env:GITHUB_OUTPUT
+          releaseNotes=$(cat releasenotes.md)
+          echo "RELEASE_NOTES<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$releaseNotes" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Pack NuGet package
-        run: dotnet pack --configuration Release -o . /p:Version=${{ steps.get_version.outputs.NUGET_VERSION }} /p:PackageReleaseNotes="$([System.Security.SecurityElement]::Escape(${{ steps.get_release_notes.outputs.RELEASE_NOTES }}))"
+        run: dotnet pack --configuration Release -o . /p:Version=${{ steps.get_version.outputs.NUGET_VERSION }} /p:PackageReleaseNotes="$(echo ${{ steps.get_release_notes.outputs.RELEASE_NOTES }} | sed -e 's/["\$`\\]/\\&/g')" #Escape properly.
         
       - name: Push NuGet package to NuGet.org
         run: dotnet nuget push "*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
