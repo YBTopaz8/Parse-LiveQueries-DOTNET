@@ -1,78 +1,39 @@
-﻿# v3.2.0: Robust LiveQuery Client with Enhanced Reliability and Stability 🚀
-**Key Enhancements:**
+﻿
+# v3.4.0: Enhanced Subscription Management and Refined Error Handling ✨
 
-*   **Automatic Reconnection:** Implemented automatic reconnection to the LiveQuery server upon connection loss.
-    *   Features exponential backoff with configurable retries.
-    *   Reports reconnection attempts and failures via the `OnError` observable.
+This release focuses on improving the subscription process and making error handling more informative and consistent. We've refined internal workings to provide a smoother, more predictable LiveQuery experience. **This version builds cleanly with no warnings, ensuring a smoother development experience. - Finally! 🫡**
 
-*   **Heartbeat (Ping/Pong):** Integrated WebSocket Ping/Pong frames for robust connection health monitoring.
-    *   Detects and recovers from "dead" connections, enhancing stability.
+**Key Improvements:**
 
-*   **Configurable Receive Buffer:** Added ability to customize the WebSocket receive buffer size.
-    *   Useful for handling large messages.
-    *   Utilize: `new WebSocketClient(uri, callback, bufferSize);`
+*   **Streamlined Subscription Creation:** The `ISubscriptionFactory` has been updated. The `CreateSubscription` method now includes an `unsubscribeAction` parameter. This allows for more robust and reliable cleanup when subscriptions are no longer needed.  This is a *breaking change* for anyone with a custom `ISubscriptionFactory` implementation.
+    ```csharp
+    // Updated interface:
+    Subscription<T> CreateSubscription<T>(int requestId, ParseQuery<T> query, Action<Subscription> unsubscribeAction) where T : ParseObject;
+    ```
 
-*   **Refactored WebSocket Handling:**
-    *   Complete rewrite for improved stability, error handling, and performance.
-    *   Ensures proper resource disposal (`Dispose()`) to prevent memory leaks.
-    *   Provides clear and consistent WebSocket connection state management.
-    *   Includes placeholder for binary message handling.
-    *   Allows control over WebSocket close status and description.
+*   **Simplified Unsubscription:**  The `Subscribe` method within `ParseLiveQueryClient` now expertly handles the creation of the `unsubscribeAction`. This simplifies the subscription process and guarantees correct resource management.  Added `SubscriptionExtensions` providing utility methods for easy unsubscription: `UnsubscribeNow()` and `UnsubscribeAfter(long timeInMinutes)`.
 
-*   **Optimized Subscription Management:**
-    *   Simplified unsubscription process.
-    *   Ensures thread-safe subscription operations.
-    *   Removed reflection for enhanced performance.
+*   **More Informative Error Reporting:**
+    *   Improved error handling in `ParseObject` and `ParseUser` now includes detailed exception messages, making it easier to diagnose issues.
+    *   Error logging in `WebSocketClient` during connection closure has been enhanced, providing better insights into connection problems.
+    * The `DidEncounter` method within `Subscription<T>` benefits from improved error handling, passing the error to the subscription to provide error to users.
 
-*   **Full `IDisposable` Implementation:** `ParseLiveQueryClient`, `WebSocketClient`, and `Subscription` classes now fully implement `IDisposable`.
-    *   Guarantees proper resource cleanup.
-
-*   **Enhanced Error Handling:** Improved error handling with more informative exceptions and events.
-
-*   **Optimized JSON Handling:** Enhanced JSON serialization/deserialization.
+*   **Internal Enhancements:**
+    *   `TaskQueue` has been refined:
+        *   `TaskQueue.Tail` is now guaranteed to be non-nullable.
+        *   `TaskQueue.Enqueue` now returns a non-nullable `Task<ParseUser>`.
+    *   `ParseCurrentUserController.currentUser` is now non-nullable, reflecting its expected state more accurately.
 
 **Breaking Changes:**
 
-*   None.  This release maintains backward compatibility with v3.1.0. Thorough testing is still strongly recommended.
+*   **`ISubscriptionFactory` Interface:** As mentioned above, the `CreateSubscription` method signature has changed. Custom implementations *must* be updated to include the `Action<Subscription> unsubscribeAction` parameter.
 
 **Upgrade Notes:**
 
-*   Thorough application testing is highly recommended after upgrading due to significant internal improvements.
-*   New features (reconnection, buffer size) are optional and do not require code changes to maintain existing functionality.
+*   If you have implemented a custom `ISubscriptionFactory`, you *must* update its `CreateSubscription` method to match the new signature.
+*   While this release primarily focuses on internal improvements, thorough testing of your application after upgrading is always recommended.
+*   Enjoy a more streamlined and informative LiveQuery experience!
 
-**Happy Coding! 👋🏾**
-
-
-# v3.0.1 - QOL update 🎇
-## It's no longer REQUIRED to be logged in order to connect to LQ.  
-Any client device can connect to Live Queries independently
-
-- Fixed #8  (saves dates as string for now instead of just not saving)
-- Fixed #4  
-- Closes #7 too 
+**Happy Coding! 👍**
 
 
-# v3.0.0 🎄
-
-##### Major Update! - VERY IMPORTANT FOR SECURITY
-
-Fixed an issues where connected Live Queries would never actually close stream with server (causing memory leaks)
-This eliminates any instance where a "disconnected" user would still be able to receive data from the server and vice versa.
-Please update to this version as soon as possible to avoid any security issues.
-The best I would suggest is to migrate the currently observed classes to a new class and delete the old one.
-You can easily do this by creating a new class and copying the data from the old class to the new one (via ParseCloud in your web interface like in Back4App).
-
-More Fixes...
-- Fixed issues where `GetCurrentUIser()` from Parse did **NOT** return `userName` too.
-- Fixed issues with `Relations/Pointers` being broken.
-
-Thank You!
-
-## v2.0.4
-Improvements on base Parse SDK.
-- LogOut now works perfectly fine and doesn't crash app!
-- SignUpWithAsync() will now return the Signed up user's info to avoid Over querying.
-- Renamed some methods.
-- Fixed perhaps ALL previous UNITY crashes.
-
-(Will do previous versions later - I might never even do it )
