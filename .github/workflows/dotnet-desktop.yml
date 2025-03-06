@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - '.github/workflows/**'  # Ignore workflow file changes
 
 jobs:
   build-and-publish:
@@ -13,12 +15,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Fetch all history for tags and commit messages
+          fetch-depth: 0  # Fetch all history (tags and commits)
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '9.0'
+          dotnet-version: '9.0'  # Use your project's .NET version
 
       - name: Update Workloads
         run: dotnet workload update
@@ -29,47 +31,8 @@ jobs:
       - name: Build project
         run: dotnet build --configuration Release
 
-      - name: Get NuGet package version from tag
-        id: get_version
-        run: |
-          echo "NUGET_VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')" >> $env:GITHUB_OUTPUT
-          echo "Version is ${{ steps.get_version.outputs.NUGET_VERSION }}"
-
-      - name: Get Commit/PR Message
-        id: get_message
-        shell: pwsh  # Explicitly specify PowerShell
-        run: |
-          if ($env:GITHUB_EVENT_PATH -and (Get-Content $env:GITHUB_EVENT_PATH | ConvertFrom-Json).pull_request) {
-            $prNumber = (Get-Content $env:GITHUB_EVENT_PATH | ConvertFrom-Json).pull_request.number
-            $prTitle = gh pr view $prNumber --json title -q '.title'
-            $prBody = gh pr view $prNumber --json body -q '.body'
-            echo "RELEASE_MESSAGE=$($prTitle)`n$($prBody)" >> $env:GITHUB_OUTPUT
-          } else {
-            echo "RELEASE_MESSAGE=$(git log -1 --pretty=%B)" >> $env:GITHUB_OUTPUT
-          }
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pack NuGet package
-        run: dotnet pack --configuration Release -o . /p:Version=${{ steps.get_version.outputs.NUGET_VERSION }}
-
-      - name: Push NuGet package to NuGet.org
-        if: startsWith(github.ref, 'refs/heads/master')
-        run: dotnet nuget push "*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
-        working-directory: .
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ steps.get_version.outputs.NUGET_VERSION }}
-          name: Release v${{ steps.get_version.outputs.NUGET_VERSION }}
-          body: ${{ steps.get_message.outputs.RELEASE_MESSAGE }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install GitHub CLI  # Moved after Get Commit/PR Message
-        shell: bash #  Install using bash.
-        if: ${{ github.event.pull_request != null }}
+      - name: Install GitHub CLI
+        shell: bash
         run: |
           type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
           curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -77,3 +40,63 @@ jobs:
           && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
           && sudo apt update \
           && sudo apt install gh -y
+
+      - name: Get Next Version and Create Tag
+        id: get_version
+        shell: pwsh
+        run: |
+          # Get the highest existing tag (if any)
+          $latestTag = git describe --tags --abbrev=0 --match "v*" 2> $null
+          if (-not $latestTag) {
+            # If no tags exist, start with 3.4.0
+            $nextVersion = "3.4.0"
+          } else {
+            # If tags exist, increment based on the highest tag
+            $versionParts = ($latestTag -replace '^v', '').Split('.')
+            $major = [int]$versionParts[0]
+            $minor = [int]$versionParts[1]
+            $patch = [int]$versionParts[2]
+
+            #  Increment the minor version, reset patch to 0.  You can change this logic
+            #  to increment patch, major, etc., as needed.
+            if ($major -lt 3 -or ($major -eq 3 -and $minor -lt 4)) {
+              $nextVersion = "3.4.0" # Force 3.4.0 if < 3.4.0
+            } else {
+                $minor++
+                $nextVersion = "$major.$minor.0"
+            }
+          }
+          
+          # Create and push the tag
+          git tag "v$nextVersion"
+          git push origin "v$nextVersion"
+
+          echo "NUGET_VERSION=$nextVersion" >> $env:GITHUB_OUTPUT
+          echo "Version is ${{ steps.get_version.outputs.NUGET_VERSION }}"
+
+      - name: Get Release Notes (from releasenotes.md)
+        id: get_release_notes
+        shell: pwsh
+        run: |
+          $releaseNotes = Get-Content releasenotes.md -Raw
+          echo "RELEASE_NOTES<<EOF" >> $env:GITHUB_OUTPUT
+          echo "$releaseNotes" >> $env:GITHUB_OUTPUT
+          echo "EOF" >> $env:GITHUB_OUTPUT
+
+      - name: Pack NuGet package
+        run: dotnet pack --configuration Release -o . /p:Version=${{ steps.get_version.outputs.NUGET_VERSION }} /p:PackageReleaseNotes="$([System.Security.SecurityElement]::Escape(${{ steps.get_release_notes.outputs.RELEASE_NOTES }}))"
+        
+      - name: Push NuGet package to NuGet.org
+        run: dotnet nuget push "*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+        working-directory: .
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get_version.outputs.NUGET_VERSION }}
+          release_name: Release v${{ steps.get_version.outputs.NUGET_VERSION }}
+          body: ${{ steps.get_release_notes.outputs.RELEASE_NOTES }}
+          draft: false
+          prerelease: false
