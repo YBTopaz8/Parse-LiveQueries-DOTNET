@@ -41,7 +41,7 @@ jobs:
 
       - name: Get Next Version and Create Tag
         id: get_version
-        shell: bash  # Use bash for git commands
+        shell: bash
         run: |
           # Get the highest existing tag (if any)
           latestTag=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null)
@@ -70,19 +70,8 @@ jobs:
 
           echo "NUGET_VERSION=$nextVersion" >> "$GITHUB_OUTPUT"
 
-      - name: Get Release Notes (from releasenotes.md)
-        id: get_release_notes
-        shell: bash
-        run: |
-          releaseNotes=$(cat ParseLiveQuery/docs/ReleaseNotes.md)  # Corrected path
-          echo "RELEASE_NOTES<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$releaseNotes" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
       - name: Pack NuGet package
-        run: |
-          release_notes_escaped=$(sed -e 's/["\$`\\]/\\&/g' <<< "${{ steps.get_release_notes.outputs.RELEASE_NOTES }}")
-          dotnet pack --configuration Release -o . /p:Version=${{ steps.get_version.outputs.NUGET_VERSION }} /p:PackageReleaseNotes="$release_notes_escaped"
+        run: dotnet pack --configuration Release -o . /p:Version=${{ steps.get_version.outputs.NUGET_VERSION }}
 
       - name: Push NuGet package to NuGet.org
         run: dotnet nuget push "*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
@@ -95,6 +84,6 @@ jobs:
         with:
           tag_name: v${{ steps.get_version.outputs.NUGET_VERSION }}
           release_name: Release v${{ steps.get_version.outputs.NUGET_VERSION }}
-          body: ${{ steps.get_release_notes.outputs.RELEASE_NOTES }}
+          body: ""  # Empty body - no release notes
           draft: false
           prerelease: false
