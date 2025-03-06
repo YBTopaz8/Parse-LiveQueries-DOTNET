@@ -5,8 +5,7 @@
     <RootNamespace>YB.Parse.LiveQuery</RootNamespace>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>latest</LangVersion>
-    <PackageId>YB.ParseLiveQueryDotNet</PackageId>
-    <Version>3.1.0</Version>
+    <PackageId>YB.ParseLiveQueryDotNet</PackageId>    
     <Authors>Yvan Brunel</Authors>
     <Company>Me</Company>
     <Description>A Modern .NET library for Parse Live Query. Compatible With .NET MAUI for Windows, Android, MacOS, iOS too, Now Smart Watches ;)</Description>
@@ -15,14 +14,18 @@
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageProjectUrl>https://github.com/YBTopaz8/parse-live-query-dotnet</PackageProjectUrl>
     <PackageReadmFile>Readme.md</PackageReadmFile>
-    
+    <Version>3.4.0</Version>
   </PropertyGroup>
   <PropertyGroup>
     <PackageReleaseNotes>See detailed release notes in ReleaseNotes.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="ReleaseNotes.md" Pack="true" PackagePath="ReleaseNotes.md" />
+    <None Include="..\..\..\..\Pictures\paaarse.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="ReleaseNotes.md" Pack="True" PackagePath="\" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.Net.WebSockets.Client" Version="4.3.2" />
@@ -30,7 +33,9 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <Copyright>MIT License - (c) 2024 Yvan Brunel</Copyright>
+    <Copyright>MIT License - (c) 2025 Yvan Brunel</Copyright>
+    <PackageIcon>paaarse.png</PackageIcon>
+    <PackageReadmeFile>ReleaseNotes.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -41,7 +46,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="docs\README.md" Pack="true" PackagePath="\"/>
+    <None Include="docs\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 

@@ -142,6 +142,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
             }
             catch (Exception ex)
             {
+                Console.WriteLine("Exception when closing async "+ ex.Message);
                 // Avoid exception.
             }
         }

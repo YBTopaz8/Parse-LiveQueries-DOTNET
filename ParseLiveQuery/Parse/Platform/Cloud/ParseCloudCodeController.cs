@@ -34,7 +34,7 @@ public class ParseCloudCodeController : IParseCloudCodeController
         {
             // Prepare the command
             var command = new ParseCommand(
-                $"functions/{Uri.EscapeUriString(name)}",
+                $"functions/{Uri.EscapeDataString(name)}",
                 method: "POST",
                 sessionToken: sessionToken,
                 data: NoObjectsEncoder.Instance.Encode(parameters, serviceHub) as IDictionary<string, object>);

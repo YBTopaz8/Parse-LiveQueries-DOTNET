@@ -78,9 +78,7 @@ public class ParseLiveQueryClient :IDisposable
 
     private static Uri GetDefaultUri()
     {
-        string server = ParseClient.Instance.ServerConnectionData.ServerURI;
-        if (server == null)
-            throw new InvalidOperationException("Missing default Server URI in CurrentConfiguration");
+        string server = ParseClient.Instance.ServerConnectionData.ServerURI ?? throw new InvalidOperationException("Missing default Server URI in CurrentConfiguration");
 
         Uri serverUri = new(server);
         return new UriBuilder(serverUri)
@@ -116,17 +114,29 @@ public class ParseLiveQueryClient :IDisposable
     /// Subscribes to a specified Parse query to receive real-time updates 
     /// for Create, Update, Delete, and other events on objects matching the query.
     /// </summary>
-    public Subscription<T> Subscribe<T>(ParseQuery<T> query, string? SubscriptionName=null) where T : ParseObject
+    public Subscription<T> Subscribe<T>(ParseQuery<T> query, string SubscriptionName=null) where T : ParseObject
     {
+        Action<Subscription> unsubscribeAction = (subscription) =>
+        {
+            if (_subscriptions.TryRemove(subscription.RequestID, out var removedSubscription))
+            {
+                if (!string.IsNullOrEmpty(removedSubscription.Name))
+                {
+                    _namedSubscriptions.TryRemove(removedSubscription.Name, out _);
+                }
+            }
+        };
 
         // Create Subscription object
         var requestId = _requestIdCount++;
-        var subscription = _subscriptionFactory.CreateSubscription(requestId, query);
+        var subscription = _subscriptionFactory.CreateSubscription(requestId, query, unsubscribeAction);
         if (!string.IsNullOrEmpty(SubscriptionName))
         {
             subscription.Name = SubscriptionName;
             
-            _namedSubscriptions.AddOrUpdate(SubscriptionName, subscription, (name, oldSubscription) => subscription); // Overwrite if name exists
+            _namedSubscriptions
+                .AddOrUpdate(SubscriptionName, subscription, 
+                (name, oldSubscription) => subscription); // Overwrite if name exists
             
         }
         // Add to subscriptions collection
@@ -148,13 +158,6 @@ public class ParseLiveQueryClient :IDisposable
         return subscription;
     }
 
-    //public bool IsConnected
-    //{
-    //    get 
-    //    { 
-    //        return IsConnected(); 
-    //    }        
-    //}
 
     public void ConnectIfNeeded()
     {
@@ -395,7 +398,7 @@ public class ParseLiveQueryClient :IDisposable
                     throw new LiveQueryException.InvalidResponseException($"Unexpected operation: {rawOperation}");
             }
         }
-        catch (Exception e) when (!(e is LiveQueryException))
+        catch (Exception e) when (e is not LiveQueryException)
         {
             _errorSubject.OnNext(new LiveQueryException.InvalidResponseException(message, e));
         }
@@ -634,9 +637,9 @@ public class ParseLiveQueryClient :IDisposable
     }
     private class SubscriptionFactory : ISubscriptionFactory
     {
-        public Subscription<T> CreateSubscription<T>(int requestId, ParseQuery<T> query) where T : ParseObject
+        public Subscription<T> CreateSubscription<T>(int requestId, ParseQuery<T> query, Action<Subscription> unsubscribeAction) where T : ParseObject
         {
-            return new Subscription<T>(requestId, query);
+            return new Subscription<T>(requestId, query, unsubscribeAction);
         }
     }
 

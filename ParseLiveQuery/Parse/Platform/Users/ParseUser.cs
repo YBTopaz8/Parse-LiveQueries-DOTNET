@@ -30,7 +30,7 @@ public class ParseUser : ParseObject
         }
         catch (Exception ex)
         {
-
+            Console.WriteLine("Exception here when checking if is authenticated"+ex.Message);
             return false;
         }
     }
@@ -114,7 +114,7 @@ public class ParseUser : ParseObject
         {
             
             HandleFailedSave(currentOperations);
-            throw;
+            throw new Exception(ex.Message);
         }
     }
 
