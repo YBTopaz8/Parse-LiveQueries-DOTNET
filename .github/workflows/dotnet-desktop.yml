@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - master
-    paths-ignore:
-      - '.github/workflows/**'  # Ignore workflow file changes
 
 jobs:
   build-and-publish:
