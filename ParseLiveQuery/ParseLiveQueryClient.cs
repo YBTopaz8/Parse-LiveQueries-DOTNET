@@ -47,6 +47,9 @@ public class ParseLiveQueryClient :IDisposable
     private readonly Subject<(Subscription.Event evt, object objectData, Subscription subscription)> _objectEventSubject = new();
 
     // Expose IObservables for consumption
+
+    private readonly Subject<LiveQueryConnectionState> _connectionStateSubject = new();
+    public IObservable<LiveQueryConnectionState> OnConnectionStateChanged => _connectionStateSubject.AsObservable();
     public IObservable<ParseLiveQueryClient> OnConnected => _connectedSubject.AsObservable();
     public IObservable<(ParseLiveQueryClient client, bool userInitiated)> OnDisconnected => _disconnectedSubject.AsObservable();
     public IObservable<LiveQueryException> OnError => _errorSubject.AsObservable();
@@ -75,6 +78,22 @@ public class ParseLiveQueryClient :IDisposable
         _subscriptionFactory = subscriptionFactory;
         _taskQueue = taskQueue;
     }
+
+    // In ParseLiveQueryClient
+    private LiveQueryConnectionState _connectionState = LiveQueryConnectionState.Disconnected;
+    public LiveQueryConnectionState ConnectionState
+    {
+        get => _connectionState;
+        private set // Only the class can change the state.
+        {
+            if (_connectionState != value)
+            {
+                _connectionState = value;
+                _connectionStateSubject.OnNext(_connectionState);
+            }
+        }
+    }
+
 
     private static Uri GetDefaultUri()
     {
@@ -660,6 +679,14 @@ public interface IWebSocketClientCallback
     void OnError(Exception exception);
     void OnStateChanged();
 }
+public enum LiveQueryConnectionState
+{
+    Disconnected,
+    Connecting,
+    Connected,
+    Reconnecting,
+    Failed // Or PermanentlyDisconnected
+}
 
 
 
@@ -892,4 +919,5 @@ public static class ObjectMapper
 
         return value?.ToString(); // Fallback for unhandled types
     }
+    
 }

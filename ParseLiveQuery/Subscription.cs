@@ -101,6 +101,7 @@ public class Subscription<T> : Subscription where T : ParseObject
     /// <param name="queryObj">The query object associated with the subscription.</param>
     internal override void DidSubscribe(object queryObj)
     {
+        isConnected = true;
         // Publish to the subscribe stream
         _subscribeStream.OnNext((ParseQuery<T>)queryObj);
     }
@@ -111,6 +112,7 @@ public class Subscription<T> : Subscription where T : ParseObject
     /// <param name="queryObj">The query object associated with the unsubscription.</param>
     internal override void DidUnsubscribe(object queryObj)
     {
+        isConnected = false;
         // Publish to the unsubscribe stream
         _unsubscribeStream.OnNext((ParseQuery<T>)queryObj);
     }
@@ -194,6 +196,15 @@ public abstract class Subscription : IDisposable
     private CancellationTokenSource _unsubscribeCts;
     private readonly Action<Subscription> _unsubscribeAction;
     /// <summary>
+    /// Indicates whether the subscription is currently connected.
+    /// </summary>
+    protected bool isConnected = false;
+
+    /// <summary>
+    /// Gets a value indicating whether the subscription is currently connected.
+    /// </summary>
+    public bool IsConnected => isConnected;
+    /// <summary>
     /// The Query of the subscription. This can now be any type of object,
     /// as it's used for communication and casted appropriately in subclasses.
     /// </summary>
@@ -253,6 +264,7 @@ public abstract class Subscription : IDisposable
         RequestID = requestId;
         QueryObj = query;
         _unsubscribeAction = unsubscribeAction ?? throw new ArgumentNullException(nameof(unsubscribeAction));
+        isConnected = false; // Initialize as not connected.
     }
     // Internal unsubscription method, called by extension methods
     internal void UnsubscribeInternal()
@@ -264,6 +276,8 @@ public abstract class Subscription : IDisposable
     // Internal method for delayed unsubscription
     internal void UnsubscribeAfterInternal(long timeInMinutes)
     {
+        isConnected = false; // Initialize as not connected.
+
         if (timeInMinutes <= 0)
         {
             UnsubscribeInternal();
