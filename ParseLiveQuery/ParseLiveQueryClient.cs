@@ -143,18 +143,17 @@ public class ParseLiveQueryClient :IDisposable
         _subscriptions.TryAdd(requestId, subscription);
 
         // Handle cases
-        if (IsConnected)
+        if (!IsConnected)
         {
-            SendSubscription(subscription);
+            ConnectIfNeeded();
         }
         else if (_userInitiatedDisconnect)
         {
             throw new InvalidOperationException("The client was explicitly disconnected and must be reconnected before subscribing");
         }
-        else
-        {
-            ConnectIfNeeded();
-        }
+        
+        SendSubscription(subscription);
+
         return subscription;
     }
 
@@ -170,6 +169,7 @@ public class ParseLiveQueryClient :IDisposable
                 break;
             case WebSocketClientState.Connecting:
             case WebSocketClientState.Connected:
+                _hasReceivedConnected=true;
                 break;
             default:
                 break;
@@ -248,6 +248,10 @@ public class ParseLiveQueryClient :IDisposable
         _hasReceivedConnected = false;
         _webSocketClient = _webSocketClientFactory(_hostUri, new WebSocketClientCallback(this)); // Pass callback here
         _webSocketClient.Open();
+        if (_webSocketClient.State == WebSocketState.Open)
+        {
+            _hasReceivedConnected=true;
+        }
     }
 
 

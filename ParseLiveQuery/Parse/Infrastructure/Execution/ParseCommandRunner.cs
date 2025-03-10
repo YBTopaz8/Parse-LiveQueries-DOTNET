@@ -97,7 +97,7 @@ public class ParseCommandRunner : IParseCommandRunner
         }
         else if (responseCode == 404)
         {
-            throw new ParseFailureException(ParseFailureException.ErrorCode.ERROR404, "Error 404");
+            throw new ParseFailureException(ParseFailureException.ErrorCode.ERROR404, "Error 404 " +response.Item1+ response.Item2);
         }
         if (responseCode == 410)
         {
