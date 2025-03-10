@@ -3,7 +3,7 @@ name: NuGet Release Automation
 on:
   push:
     branches:
-      - master
+      - Rel
 
 jobs:
   build-and-publish:
