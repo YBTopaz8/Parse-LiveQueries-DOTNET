@@ -135,7 +135,7 @@ public class ParseLiveQueryClient :IDisposable
     /// </summary>
     public Subscription<T> Subscribe<T>(ParseQuery<T> query, string SubscriptionName=null) where T : ParseObject
     {
-        Action<Subscription> unsubscribeAction = (subscription) =>
+        void unsubscribeAction(Subscription subscription)
         {
             if (_subscriptions.TryRemove(subscription.RequestID, out var removedSubscription))
             {
@@ -144,7 +144,7 @@ public class ParseLiveQueryClient :IDisposable
                     _namedSubscriptions.TryRemove(removedSubscription.Name, out _);
                 }
             }
-        };
+        }
 
         // Create Subscription object
         var requestId = _requestIdCount++;
@@ -427,7 +427,7 @@ public class ParseLiveQueryClient :IDisposable
         }
     }
 
-    private void HandleSubscribedEvent(IDictionary<string, object> jsonObject)
+    private void HandleSubscribedEvent(Dictionary<string, object> jsonObject)
     {
         if (jsonObject.TryGetValue("requestId", out var requestIdObj) &&
             requestIdObj is int requestId &&
@@ -439,7 +439,7 @@ public class ParseLiveQueryClient :IDisposable
     }
 
 
-    private void HandleUnsubscribedEvent(IDictionary<string, object> jsonObject)
+    private void HandleUnsubscribedEvent(Dictionary<string, object> jsonObject)
     {
         if (jsonObject.TryGetValue("requestId", out var requestIdObj) 
             &&
@@ -457,7 +457,7 @@ public class ParseLiveQueryClient :IDisposable
     }
 
 
-    private void HandleObjectEvent(Subscription.Event subscriptionEvent, IDictionary<string, object> jsonObject)
+    private void HandleObjectEvent(Subscription.Event subscriptionEvent, Dictionary<string, object> jsonObject)
     {
         try
         {
@@ -481,7 +481,7 @@ public class ParseLiveQueryClient :IDisposable
     }
 
 
-    private IDictionary<string, object> JsonElementToDictionary(JsonElement element)
+    private Dictionary<string, object> JsonElementToDictionary(JsonElement element)
     {
         if (element.ValueKind != JsonValueKind.Object)
         {
@@ -523,7 +523,7 @@ public class ParseLiveQueryClient :IDisposable
     }
 
 
-    private void HandleErrorEvent(IDictionary<string, object> jsonObject)
+    private void HandleErrorEvent(Dictionary<string, object> jsonObject)
     {
         if (jsonObject.TryGetValue("requestId", out var requestIdObj) && requestIdObj is int requestId)
         {
