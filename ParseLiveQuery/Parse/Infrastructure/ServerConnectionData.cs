@@ -11,7 +11,7 @@ public struct ServerConnectionData : IServerConnectionData
     
     // TODO: Move Test property elsewhere.
 
-    internal bool Test { get; set; }
+    public bool Test { get; set; }
 
     /// <summary>
     /// The App ID of your app.

@@ -65,25 +65,53 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
     /// <param name="configurators">A set of <see cref="IServiceHubMutator"/> implementation instances to tweak the behaviour of the SDK.</param>
     public ParseClient(IServerConnectionData configuration, IServiceHub serviceHub = default, params IServiceHubMutator[] configurators)
     {
-        Services = serviceHub is { } ? new OrchestrationServiceHub { Custom = serviceHub, Default = new ServiceHub { ServerConnectionData = GenerateServerConnectionData() } } : new ServiceHub { ServerConnectionData = GenerateServerConnectionData() } as IServiceHub;
-
-        IServerConnectionData GenerateServerConnectionData() => configuration switch
+        if (serviceHub is { })
         {
-            null => throw new ArgumentNullException(nameof(configuration)),
-            ServerConnectionData { Test: true, ServerURI: { } } data => data,
-            ServerConnectionData { Test: true } data => new ServerConnectionData
+            Services = new OrchestrationServiceHub { Custom = serviceHub, Default = new ServiceHub { ServerConnectionData = GenerateServerConnectionData() } };
+        }
+        else
+        {
+            Services = new ServiceHub { ServerConnectionData = GenerateServerConnectionData() } as IServiceHub;
+        }
+
+        IServerConnectionData GenerateServerConnectionData()
+        {
+            if (configuration == null)
+                throw new ArgumentNullException(nameof(configuration));
+
+            var data = configuration as IServerConnectionData;
+            if (string.IsNullOrEmpty(data.Key))
             {
-                ApplicationID = data.ApplicationID,
-                Headers = data.Headers,
-                MasterKey = data.MasterKey,
-                Test = data.Test,
-                Key = data.Key,
-                ServerURI = "https://api.parse.com/1/"
-            },
-            { ServerURI: "https://api.parse.com/1/" } => throw new InvalidOperationException("Since the official parse server has shut down, you must specify a URI that points to a hosted instance."),
-            { ApplicationID: { }, ServerURI: { }, Key: { } } data => data,
-            _ => throw new InvalidOperationException("The IServerConnectionData implementation instance provided to the ParseClient constructor must be populated with the information needed to connect to a Parse server instance.")
-        };
+                data.Key=data.MasterKey;
+            }
+            if (data != null && data.Test && !string.IsNullOrEmpty(data.ServerURI))
+            {
+                return data;
+            }
+            else if (data != null && data.Test)
+            {
+                return new ServerConnectionData
+                {
+                    ApplicationID = data.ApplicationID,
+                    Headers = data.Headers,
+                    MasterKey = data.MasterKey,
+                    Test = data.Test,
+                    Key = data.Key,
+                    ServerURI = data.ServerURI,
+                };
+            }
+            else if (!string.IsNullOrEmpty(configuration.ApplicationID)
+                  && !string.IsNullOrEmpty(configuration.ServerURI)
+                  && !string.IsNullOrEmpty(configuration.Key))
+            {
+                return configuration;
+            }
+            else
+            {
+                throw new InvalidOperationException("The IServerConnectionData implementation instance provided to the ParseClient constructor must be populated with the information needed to connect to a Parse server instance.");
+            }
+        }
+
 
         if (configurators is { Length: int length } && length > 0)
         {
