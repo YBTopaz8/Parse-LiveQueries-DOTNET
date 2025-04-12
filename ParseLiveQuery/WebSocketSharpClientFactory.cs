@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Buffers;
+using System.Diagnostics;
 using System.IO;
 using System.Net.WebSockets;
 using System.Reactive.Linq;
@@ -11,39 +13,45 @@ namespace Parse.LiveQuery;
 
 public class WebSocketClient : IWebSocketClient, IDisposable
 {
-    public static readonly WebSocketClientFactory Factory = (hostUri, callback) => new WebSocketClient(hostUri, callback);
+
+    
+    public static readonly WebSocketClientFactory Factory = (hostUri, callback,  bufferSize) =>
+        new WebSocketClient(hostUri, callback,  bufferSize);
 
     private readonly Uri _hostUri;
     private readonly IWebSocketClientCallback _webSocketClientCallback;
+    
     private ClientWebSocket _webSocket;
-    private CancellationTokenSource _cancellationTokenSource;
+    private CancellationTokenSource _internalCts; 
+    private readonly object _stateLock = new(); 
 
-    // Reconnection
+    
     private int _reconnectionAttempts = 0;
     private const int MaxReconnectionAttempts = 5;
     private const int InitialReconnectDelayMs = 1000;
     private const int MaxReconnectDelayMs = 30000;
 
-    // Ping-Pong
-    private readonly TimeSpan _pingInterval = TimeSpan.FromSeconds(30);
-    private CancellationTokenSource _pingCts;
-    private const int PingTimeoutMs = 20000; // Timeout for receiving a pong
+    
+    private readonly TimeSpan _keepAliveInterval = TimeSpan.FromSeconds(30); 
+    private readonly int _receiveBufferSize; 
 
-    // Buffer Size
-    private int _receiveBufferSize = 8192; // Initial buffer size.
-
+    
     private readonly Subject<WebSocketState> _stateChanges = new();
     private readonly Subject<string> _messages = new();
+    private readonly Subject<ReadOnlyMemory<byte>> _binaryMessages = new(); 
     private readonly Subject<Exception> _errors = new();
-    private bool _disposed = false;
-
+    private volatile bool _disposed = false;
+    private volatile WebSocketState _currentState = WebSocketState.None;
+    
     public WebSocketClient(Uri hostUri, IWebSocketClientCallback webSocketClientCallback)
     {
         _hostUri = hostUri;
         _webSocketClientCallback = webSocketClientCallback;
-        //_webSocket = new ClientWebSocket();
+        
     }
-    public WebSocketClient(Uri hostUri, IWebSocketClientCallback webSocketClientCallback, int receiveBufferSize)
+    public WebSocketClient(Uri hostUri, IWebSocketClientCallback webSocketClientCallback,
+        
+        int receiveBufferSize)
     : this(hostUri, webSocketClientCallback)
     {
         _receiveBufferSize = receiveBufferSize;
@@ -74,89 +82,18 @@ public class WebSocketClient : IWebSocketClient, IDisposable
         }
     }
 
-    public async Task Open()
-    {
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(nameof(WebSocketClient));
-        }
+    public IObservable<ReadOnlyMemory<byte>> BinaryMessages => throw new NotImplementedException();
 
-        _cancellationTokenSource = new CancellationTokenSource();
-        _webSocket = new ClientWebSocket(); // New WebSocket instance per connection attempt
-        _stateChanges.OnNext(WebSocketState.Connecting);
-        await ConnectWithRetryAsync();
-    }
-    private async Task ConnectWithRetryAsync()
-    {
-        while (!_cancellationTokenSource.Token.IsCancellationRequested && _reconnectionAttempts < MaxReconnectionAttempts)
-        {
-            try
-            {
-                await _webSocket.ConnectAsync(_hostUri, _cancellationTokenSource.Token);
-                _stateChanges.OnNext(WebSocketState.Open);
-                await _webSocketClientCallback.OnOpen();
-                _reconnectionAttempts = 0; // Reset on successful connection
-                _ = ReceiveLoopAsync(); // Start receiving messages
-                StartPingPong();       // Start the ping/pong mechanism
-                return; // Exit the loop on successful connection
-            }
-            catch (Exception ex)
-            {
-                _stateChanges.OnNext(WebSocketState.Error);
-                _errors.OnNext(ex);
-                // Do NOT call _webSocketClientCallback.OnError here; we're retrying.
-
-                _reconnectionAttempts++;
-                int delayMs = (int)Math.Min(InitialReconnectDelayMs * Math.Pow(2, _reconnectionAttempts - 1), MaxReconnectDelayMs);
-                await Task.Delay(delayMs, _cancellationTokenSource.Token); // Exponential backoff
-            }
-        }
-
-        if (_reconnectionAttempts >= MaxReconnectionAttempts)
-        {
-            // Notify of failure *after* all retries.
-            _webSocketClientCallback.OnError(new Exception("Max reconnection attempts reached."));
-        }
-    }
-
-    public async Task Close()
-    {
-        await CloseAsync(WebSocketCloseStatus.NormalClosure, "Client initiated close");
-    }
-
-    // Added CloseAsync method to allow specifying close status and description.
-    public async Task CloseAsync(WebSocketCloseStatus closeStatus, string statusDescription)
-    {
-        if (_disposed)
-        { return; }
-
-        _cancellationTokenSource?.Cancel(); // Cancel any ongoing operations
-        StopPingPong();                   // Stop the ping-pong loop
-
-        if (_webSocket != null && (_webSocket.State == System.Net.WebSockets.WebSocketState.Open || _webSocket.State == System.Net.WebSockets.WebSocketState.CloseReceived || _webSocket.State == System.Net.WebSockets.WebSocketState.CloseSent))
-        {
-            try
-            {
-                // Use provided close status and description
-                await _webSocket.CloseAsync(closeStatus, statusDescription, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Exception when closing async "+ ex.Message);
-                // Avoid exception.
-            }
-        }
-
-        _stateChanges.OnNext(WebSocketState.Closed);
-        _webSocketClientCallback.OnClose(); // Always notify the callback.
-    }
+ 
+    
+    
 
 
     public async Task Send(string message)
     {
         if (_disposed)
         {
-            return; // Do not send anything when disposed
+            return; 
         }
 
         if (_webSocket.State != System.Net.WebSockets.WebSocketState.Open)
@@ -180,143 +117,240 @@ public class WebSocketClient : IWebSocketClient, IDisposable
         }
     }
 
-    private async Task ReceiveLoopAsync()
-    {
-        MemoryStream outputStream = null;
-        WebSocketReceiveResult receiveResult = null;
-        var buffer = new byte[_receiveBufferSize]; // Use the configured buffer size
 
-        while (_webSocket.State == System.Net.WebSockets.WebSocketState.Open && !_cancellationTokenSource.Token.IsCancellationRequested && !_disposed)
+
+    public async Task OpenAsync(CancellationToken cancellationToken = default)
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(WebSocketClient));
+
+        
+
+        CancellationTokenSource linkedCts = null;
+        try
         {
-            try
+            lock (_stateLock)
             {
-                outputStream = new MemoryStream(_receiveBufferSize);
+                if (State is WebSocketState.Connecting or WebSocketState.Open)
+                {
+                    
+                    return;
+                }
+
+                // Ensure previous CTS is cancelled and disposed if OpenAsync is called multiple times
+
+
+#if NET8_0_OR_GREATER
+                _internalCts?.CancelAsync();
+#else
+                _internalCts?.Cancel();
+#endif
+                _internalCts?.Dispose();
+                _internalCts = new CancellationTokenSource();
+                linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_internalCts.Token, cancellationToken);
+
+                UpdateState(WebSocketState.Connecting);
+                _reconnectionAttempts = 0; // Reset reconnection attempts on explicit open
+            }
+
+            // Start connection attempt outside lock
+            await ConnectWithRetryAsync(linkedCts.Token);
+        }
+        catch (OperationCanceledException oCEx) when (cancellationToken.IsCancellationRequested)
+        {
+            
+            // If cancellation came from the external token, ensure clean state
+            await HandleConnectionClosedOrFailedAsync("Open cancelled by caller." +oCEx.Message);
+        }
+        catch (Exception ex)
+        {
+            
+            ReportError(ex);
+            await HandleConnectionClosedOrFailedAsync($"Open failed: {ex.Message}");
+        }
+        finally
+        {
+            linkedCts?.Dispose();
+        }
+    }
+
+
+    public async Task SendAsync(string message, CancellationToken cancellationToken = default)
+    {
+        if (_disposed)
+        {
+            
+            return;
+        }
+
+        var currentWebSocket = _webSocket; 
+
+        if (currentWebSocket == null || currentWebSocket.State != System.Net.WebSockets.WebSocketState.Open)
+        {
+            var state = currentWebSocket?.State.ToString() ?? "null";
+            var exception = new InvalidOperationException($"WebSocket is not connected (State: {state}). Cannot send message.");
+            
+            ReportError(exception);
+            
+            return;
+        }
+
+        try
+        {
+            
+                                                                     
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_internalCts?.Token ?? CancellationToken.None, cancellationToken);
+
+            
+            var buffer = Encoding.UTF8.GetBytes(message);
+            await currentWebSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, linkedCts.Token);
+            
+        }
+        catch (OperationCanceledException oCEx) when (cancellationToken.IsCancellationRequested || _internalCts?.IsCancellationRequested == true)
+        {
+
+            ReportError(oCEx);
+        }
+        catch (Exception ex)
+        {
+            
+            ReportError(ex);
+            
+            _ = HandleConnectionClosedOrFailedAsync($"Send failed: {ex.Message}");
+        }
+    }
+
+    private async Task ReceiveLoopAsync(CancellationToken loopCancellationToken)
+    {
+        
+        byte[] buffer = null;
+        MemoryStream messageStream = null;
+
+        try
+        {
+            buffer = ArrayPool<byte>.Shared.Rent(_receiveBufferSize);
+            messageStream = new MemoryStream(); 
+
+            while (_webSocket?.State == System.Net.WebSockets.WebSocketState.Open && !loopCancellationToken.IsCancellationRequested)
+            {
+                messageStream.SetLength(0); 
+                messageStream.Position = 0;
+                ValueWebSocketReceiveResult receiveResult;
+
                 do
                 {
-                    receiveResult = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), _cancellationTokenSource.Token);
+                    
+                    var bufferSegment = new Memory<byte>(buffer);
+                    receiveResult = await _webSocket.ReceiveAsync(bufferSegment, loopCancellationToken);
 
-                    if (receiveResult.MessageType != WebSocketMessageType.Close && receiveResult.MessageType != WebSocketMessageType.Close)
+                    if (loopCancellationToken.IsCancellationRequested)
+                        break; 
+
+                    
+                    switch (receiveResult.MessageType)
                     {
-                        outputStream.Write(buffer, 0, receiveResult.Count);
+                        case WebSocketMessageType.Text:
+                        case WebSocketMessageType.Binary:
+                            
+                            await messageStream.WriteAsync(bufferSegment.Slice(0, receiveResult.Count), loopCancellationToken);
+                            break;
+
+                        case WebSocketMessageType.Close:
+                            
+                            await HandleConnectionClosedOrFailedAsync("Server initiated close.");
+                            return; 
+
+                        default:
+                            
+                            
+                            break;
                     }
 
+                } while (!receiveResult.EndOfMessage && !loopCancellationToken.IsCancellationRequested);
 
-                } while (!receiveResult.EndOfMessage && !_cancellationTokenSource.Token.IsCancellationRequested);
+                if (loopCancellationToken.IsCancellationRequested)
+                    break; 
 
-
-                if (receiveResult.MessageType == WebSocketMessageType.Close)
+                
+                messageStream.Position = 0; 
+                if (receiveResult.MessageType == WebSocketMessageType.Text)
                 {
-                    // Extract close status and description.
-                    _stateChanges.OnNext(WebSocketState.Closed);
-                    _webSocketClientCallback.OnClose();
-                    break;
-                }
-                else if (receiveResult.MessageType == WebSocketMessageType.Close)
-                {
-                    // Received a pong;  handled by SendPingAsync.
-                    continue; // Go back to waiting for messages
-                }
-                else if (receiveResult.MessageType == WebSocketMessageType.Text)
-                {
-                    outputStream.Position = 0; // Reset position to read from the beginning
-                    var message = Encoding.UTF8.GetString(outputStream.ToArray());
-                    _messages.OnNext(message);
-                    await _webSocketClientCallback.OnMessage(message);
+                    
+                    var message = Encoding.UTF8.GetString(messageStream.GetBuffer(), 0, (int)messageStream.Length);
+                    
+                    _messages.OnNext(message); 
+                    await _webSocketClientCallback.OnMessage(message); 
                 }
                 else if (receiveResult.MessageType == WebSocketMessageType.Binary)
                 {
-                    // Handle binary messages
-                    outputStream.Position = 0; // Reset position to read from the beginning
-                    byte[] binaryData = outputStream.ToArray(); // Get the binary data
-                                                                // You could add a new callback for binary data, e.g.
-                                                                // _webSocketClientCallback.OnBinaryMessage(binaryData);
-                                                                // Or convert to a string and use OnMessage (if appropriate).
+                    
+                    
+                    var binaryData = new ReadOnlyMemory<byte>(messageStream.ToArray()); 
+                    _binaryMessages.OnNext(binaryData); 
+                                                        
+                                                        
                 }
-
-            }
-            catch (WebSocketException ex) when (ex.WebSocketErrorCode != WebSocketError.ConnectionClosedPrematurely)
-            {
-                // Handle specific WebSocket errors, but don't exit for premature close.
-                if (!_cancellationTokenSource.IsCancellationRequested && !_disposed)
-                {
-                    _errors.OnNext(ex);
-                    _webSocketClientCallback.OnError(ex);
-                    _stateChanges.OnNext(WebSocketState.Error);
-                }
-                break;
-            }
-            catch (Exception ex)
-            {
-                // Handle other exceptions.
-                if (!_cancellationTokenSource.IsCancellationRequested && !_disposed)
-                {
-                    _errors.OnNext(ex);
-                    _webSocketClientCallback.OnError(ex);
-                    _stateChanges.OnNext(WebSocketState.Error);
-
-                }
-                break;
-            }
-            finally
-            {
-                outputStream?.Dispose(); // Dispose the stream after each message
-            }
-
-            // Reconnect if the connection was lost
-            if (receiveResult == null || _webSocket.State != System.Net.WebSockets.WebSocketState.Open)
-            {
-                StopPingPong(); // Stop ping-pong before reconnecting
-                _webSocket.Dispose(); // Dispose the old WebSocket
-                _webSocket = new ClientWebSocket(); // Create a new WebSocket for reconnection
-                await ConnectWithRetryAsync(); // Attempt to reconnect
             }
         }
-    }
-
-
-    private async Task SendPingAsync()
-    {
-        var pingTimeoutCts = new CancellationTokenSource(); // For ping timeout
-
-        while (!_pingCts.Token.IsCancellationRequested && _webSocket.State == System.Net.WebSockets.WebSocketState.Open)
+        catch (OperationCanceledException oCEx) when (loopCancellationToken.IsCancellationRequested)
         {
-            try
-            {
-                // Send a ping frame
-                await _webSocket.SendAsync(new ArraySegment<byte>(Array.Empty<byte>()), WebSocketMessageType.Text, true, _pingCts.Token);
 
-                // Reset the timeout cancellation token source for each new ping
-                pingTimeoutCts.CancelAfter(PingTimeoutMs);
+            ReportError(oCEx);
+        }
+        catch (WebSocketException ex) when (ex.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
+        {
+            
+            ReportError(ex);
+            await HandleConnectionClosedOrFailedAsync("Connection closed prematurely.");
+        }
+        catch (Exception ex)
+        {
+            
+            ReportError(ex);
+            
+            await HandleConnectionClosedOrFailedAsync($"Receive loop error: {ex.Message}");
+        }
+        finally
+        {
+            
+            if (buffer != null)
+                ArrayPool<byte>.Shared.Return(buffer); 
+            messageStream?.DisposeAsync(); 
+        }
 
-                // Wait for the ping interval or until timeout
-                await Task.Delay(_pingInterval, _pingCts.Token);
-            }
-            catch (OperationCanceledException)
+        
+        
+        
+    }
+
+
+    private void ReportError(Exception exception)
+    {
+        if (_disposed)
+            return; 
+
+        _errors.OnNext(exception);
+
+        
+        try
+        {
+            _webSocketClientCallback.OnError(exception);
+        }
+        catch (Exception cbEx)
+        {
+            Console.WriteLine(cbEx.Message);
+        }
+
+        
+        lock (_stateLock)
+        {
+            if (State != WebSocketState.Closed)
             {
-                // Expected when _pingCts is canceled.  Exit gracefully.
-                break;
-            }
-            catch (Exception ex)
-            {
-                _errors.OnNext(ex);
-                break; // Exit on any other error
+                UpdateState(WebSocketState.Error);
             }
         }
-        pingTimeoutCts.Dispose(); // Always dispose
     }
 
-
-
-    private void StartPingPong()
-    {
-        _pingCts = new CancellationTokenSource();
-        _ = SendPingAsync(); // Fire and forget the ping loop
-    }
-
-    private void StopPingPong()
-    {
-        _pingCts?.Cancel();
-    }
     public void Dispose()
     {
         Dispose(true);
@@ -326,20 +360,237 @@ public class WebSocketClient : IWebSocketClient, IDisposable
     protected virtual void Dispose(bool disposing)
     {
         if (_disposed)
+            return;
+
+        if (disposing)
+        {
+            
+            lock (_stateLock) 
+            {
+                UpdateState(WebSocketState.Closed); 
+                _internalCts?.Cancel(); 
+                _internalCts?.Dispose();
+                _internalCts = null;
+            }
+
+            
+            _webSocket?.Dispose();
+            _webSocket = null;
+
+            
+            _messages.OnCompleted();
+            _messages.Dispose();
+            _binaryMessages.OnCompleted();
+            _binaryMessages.Dispose();
+            _errors.OnCompleted();
+            _errors.Dispose();
+            _stateChanges.OnCompleted();
+            _stateChanges.Dispose();
+        }
+        _disposed = true;
+    
+    }
+    
+    private async Task CloseInternalAsync(WebSocketCloseStatus closeStatus, string statusDescription, bool userInitiated, CancellationToken cancellationToken)
+    {
+        if (_disposed)
         {
             return;
         }
-        if (disposing)
+
+        ClientWebSocket socketToClose = null;
+        CancellationTokenSource internalCtsToCancel = null;
+
+        lock (_stateLock)
         {
-            _cancellationTokenSource?.Cancel();
-            _cancellationTokenSource?.Dispose();
-            StopPingPong();
-            _pingCts?.Dispose();
-            _webSocket?.Dispose();
-            _messages.OnCompleted();
-            _errors.OnCompleted();
-            _stateChanges.OnCompleted();
+            
+            if (State is WebSocketState.Closed or WebSocketState.None)
+            {
+                
+                return;
+            }
+
+            internalCtsToCancel = _internalCts; 
+            _internalCts = null; 
+
+            socketToClose = _webSocket;
+            _webSocket = null; 
+
+            UpdateState(WebSocketState.Closed);
+            Debug.WriteLine($"was done by user? {userInitiated}");
         }
-        _disposed = true;
+
+        
+        if (internalCtsToCancel != null)
+        {
+
+#if NET8_0_OR_GREATER
+            await internalCtsToCancel.CancelAsync();
+#else
+            internalCtsToCancel.Cancel();
+#endif
+            internalCtsToCancel.Dispose();
+        }
+
+
+        if (socketToClose != null)
+        {
+            
+            try
+            {
+                
+                using var closeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                closeCts.CancelAfter(TimeSpan.FromSeconds(5)); 
+
+                if (socketToClose.State == System.Net.WebSockets.WebSocketState.Open ||
+                    socketToClose.State == System.Net.WebSockets.WebSocketState.CloseReceived) 
+                {
+                    await socketToClose.CloseAsync(closeStatus, statusDescription, closeCts.Token);
+                    
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException) 
+            {
+
+                ReportError(ex);
+
+            }
+            finally
+            {
+                
+                socketToClose.Dispose();
+            }
+        }
+
+        
+        try
+        {
+            
+            _webSocketClientCallback.OnClose();
+        }
+        catch (Exception ex)
+        {
+            
+            ReportError(ex); 
+        }
     }
+
+    
+    private async Task HandleConnectionClosedOrFailedAsync(string reason)
+    {
+        
+        
+        await CloseInternalAsync(WebSocketCloseStatus.NormalClosure, reason, false, CancellationToken.None);
+        
+        if (State != WebSocketState.Closed)
+        {
+            UpdateState(WebSocketState.Error);
+        }
+    }
+   
+    private async Task ConnectWithRetryAsync(CancellationToken combinedToken)
+    {
+        
+
+        while (!combinedToken.IsCancellationRequested && _reconnectionAttempts < MaxReconnectionAttempts)
+        {
+            ClientWebSocket newWebSocket = null;
+            try
+            {
+                newWebSocket = new ClientWebSocket();
+                newWebSocket.Options.KeepAliveInterval = _keepAliveInterval; 
+
+                
+                await newWebSocket.ConnectAsync(_hostUri, combinedToken);
+
+                
+                
+                _webSocket = newWebSocket; 
+                UpdateState(WebSocketState.Open);
+                _reconnectionAttempts = 0; 
+
+                
+                await _webSocketClientCallback.OnOpen();
+                _ = Task.Run(() => ReceiveLoopAsync(_internalCts.Token), combinedToken); 
+
+                return; 
+            }
+            catch (OperationCanceledException) when (combinedToken.IsCancellationRequested)
+            {
+                
+                newWebSocket?.Dispose(); 
+                throw ; 
+            }
+            catch (Exception ex)
+            {
+                newWebSocket?.Dispose(); 
+                
+                ReportError(ex); 
+
+                _reconnectionAttempts++;
+                if (_reconnectionAttempts >= MaxReconnectionAttempts || combinedToken.IsCancellationRequested)
+                {
+                    break; 
+                }
+
+                int delayMs = CalculateReconnectDelay();
+                
+                try
+                {
+                    await Task.Delay(delayMs, combinedToken);
+                }
+                catch (OperationCanceledException oCEx)
+                {
+                    throw new OperationCanceledException(oCEx.Message); 
+                }
+            }
+        }
+
+        
+        var finalException = new Exception($"Failed to connect after {MaxReconnectionAttempts} attempts.");
+        
+        ReportError(finalException);
+        await HandleConnectionClosedOrFailedAsync("Max reconnection attempts reached.");
+        
+        
+    }
+
+    private void UpdateState(WebSocketState newState)
+    {
+        
+        if (_disposed)
+            return;
+
+        lock (_stateLock) 
+        {
+            if (_currentState != newState)
+            {
+                
+                _currentState = newState;
+                _stateChanges.OnNext(newState); 
+                try
+                {
+                    _webSocketClientCallback.OnStateChanged(); 
+                }
+                catch (Exception ex)
+                {
+                    
+                    
+                    ReportError(ex);
+                }
+            }
+        }
+    }
+    private int CalculateReconnectDelay()
+    {
+        
+        return (int)Math.Min(InitialReconnectDelayMs * Math.Pow(2, _reconnectionAttempts - 1), MaxReconnectDelayMs);
+    }
+
+    
+    public Task CloseAsync(WebSocketCloseStatus closeStatus = WebSocketCloseStatus.NormalClosure, string statusDescription = "Client requested close", CancellationToken cancellationToken = default)
+    {   
+        return CloseInternalAsync(closeStatus, statusDescription, true, cancellationToken);
+    }
+
 }

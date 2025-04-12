@@ -121,7 +121,7 @@ public class Subscription<T> : Subscription where T : ParseObject
     /// </summary>
     /// <param name="sessionToken">The session token to use for the subscription.</param>
     /// <returns>An IClientOperation representing the subscribe operation.</returns>
-    internal override IClientOperation CreateSubscribeClientOperation(string sessionToken = null)
+    internal override IClientOperation CreateSubscribeClientOperation(string sessionToken)
     {
         
         return new SubscribeClientOperation<T>(this, sessionToken);
@@ -224,7 +224,7 @@ public abstract class Subscription : IDisposable
     /// <param name="queryObj"></param>
     /// <param name="objEvent"></param>
     /// <param name="obj"></param>
-    internal abstract void DidReceive(object queryObj, Event objEvent, IObjectState obj);
+    internal abstract void DidReceive(object queryObj, Event objEvent, IObjectState objState);
 
     /// <summary>
     /// Abstract method for handling errors.

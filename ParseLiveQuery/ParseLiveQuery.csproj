@@ -32,7 +32,6 @@
   
   
   <ItemGroup>
-    <PackageReference Include="System.Net.WebSockets.Client" Version="4.3.2" />
     <PackageReference Include="System.Reactive" Version="6.0.1" />
   </ItemGroup>
 

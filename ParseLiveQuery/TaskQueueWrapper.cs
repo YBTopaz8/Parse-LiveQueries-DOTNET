@@ -21,17 +21,20 @@ internal class TaskQueueWrapper : ITaskQueue
         }, CancellationToken.None);
     }
 
-    public async Task EnqueueOnSuccess<TIn>(Task<TIn> task, Func<Task<TIn>, Task> onSuccess)
+    public Task EnqueueOnSuccess<TIn>(Task<TIn> task, Func<Task<TIn>, Task> onSuccess)
     {
-        try
+        return _underlying.Enqueue(async cancellationToken => 
         {
-            await task.ConfigureAwait(false);
-            await onSuccess(task).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException("Error in EnqueueOnSuccess", ex);
-        }
+            try
+            {
+                await task.ConfigureAwait(false); 
+                await onSuccess(task).ConfigureAwait(false); 
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Error during EnqueueOnSuccess execution", ex);
+            }
+        }, CancellationToken.None); 
     }
 
     public async Task EnqueueOnError(Task task, Action<Exception> onError)
