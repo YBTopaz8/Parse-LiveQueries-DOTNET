@@ -110,9 +110,9 @@ public class ParseLiveQueryClient :IDisposable
         {
             return new List<Subscription> { subscription };
         }
-        return new List<Subscription>(); 
+        return Enumerable.Empty<Subscription>().ToList(); 
     }
-    public async Task<Subscription<T>> Subscribe<T>(ParseQuery<T> query, string SubscriptionName=null) where T : ParseObject
+    public async Task<Subscription<T>> SubscribeAsync<T>(ParseQuery<T> query, string SubscriptionName=null) where T : ParseObject
     {
         void unsubscribeAction(Subscription subscription)
         {
@@ -147,7 +147,7 @@ public class ParseLiveQueryClient :IDisposable
             throw new InvalidOperationException("The client was explicitly disconnected and must be reconnected before subscribing");
         }
         
-        SendSubscription(subscription);
+        await SendSubscriptionAsync(subscription);
 
         return subscription;
     }
@@ -160,7 +160,7 @@ public class ParseLiveQueryClient :IDisposable
             case WebSocketClientState.None:
             case WebSocketClientState.Disconnecting:
             case WebSocketClientState.Disconnected:
-                await Reconnect();
+                await ReconnectAsync();
                 break;
             case WebSocketClientState.Connecting:
             case WebSocketClientState.Connected:
@@ -230,7 +230,7 @@ public class ParseLiveQueryClient :IDisposable
     }
 
 
-    public async Task Reconnect()
+    public async Task ReconnectAsync()
     {
         if(_webSocketClient!=null)
         {
@@ -247,7 +247,7 @@ public class ParseLiveQueryClient :IDisposable
     }
 
 
-    public async Task Disconnect()
+    public async Task DisconnectAsync()
     {
         await _webSocketClient?.CloseAsync();
         _webSocketClient = null;
@@ -272,9 +272,9 @@ public class ParseLiveQueryClient :IDisposable
 
     public bool IsConnected { get => _hasReceivedConnected; }
 
-    private void SendSubscription(Subscription subscription)
+    private Task SendSubscriptionAsync(Subscription subscription)
     {
-        _taskQueue.EnqueueOnError(
+       return  _taskQueue.EnqueueOnError(
             SendOperationWithSessionAsync(session => subscription.CreateSubscribeClientOperation(session ?? string.Empty)),
             error => subscription.DidEncounter(subscription.QueryObj, new LiveQueryException.UnknownException("Error when subscribing", error))
         );
@@ -290,14 +290,12 @@ public class ParseLiveQueryClient :IDisposable
     private Task SendOperationWithSessionAsync(Func<string, IClientOperation> operationFunc)
     {
         return _taskQueue.EnqueueOnSuccess(
-       ParseClient.Instance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClient.Instance.Services, CancellationToken.None),
-
+            ParseClient.Instance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClient.Instance.Services, CancellationToken.None),
        currentSessionTokenTask =>
-       {
-           var sessionToken = currentSessionTokenTask?.Result; 
-           return SendOperationAsync(operationFunc(sessionToken));
-       }
-   );
+            {
+                var sessionToken = currentSessionTokenTask?.Result; 
+                return SendOperationAsync(operationFunc(sessionToken));
+            });
     }
 
     private Task SendOperationAsync(IClientOperation operation)
@@ -307,7 +305,7 @@ public class ParseLiveQueryClient :IDisposable
 
     private Task HandleOperationAsync(string message)
     {
-        return _taskQueue.Enqueue(() => ParseMessage(message));
+        return _taskQueue.Enqueue(async () => await ParseMessage(message));
     }
 
     private static Dictionary<string, object> ConvertJsonElements(Dictionary<string, JsonElement> jsonElementDict)
@@ -334,7 +332,7 @@ public class ParseLiveQueryClient :IDisposable
         return result;
     }
 
-    private void ParseMessage(string message)
+    private async Task ParseMessage(string message)
     {
         try
         {
@@ -359,7 +357,7 @@ public class ParseLiveQueryClient :IDisposable
                     _connectedSubject.OnNext(this);
                     foreach (Subscription subscription in _subscriptions.Values)
                     {
-                        SendSubscription(subscription);
+                       await SendSubscriptionAsync(subscription);
                     }
                     break;
                 case "redirect":
@@ -399,6 +397,30 @@ public class ParseLiveQueryClient :IDisposable
         }
     }
 
+
+    private void HandleObjectEvent(Subscription.Event subscriptionEvent, Dictionary<string, object> jsonObject)
+    {
+        try
+        {
+            int requestId = Convert.ToInt32(jsonObject["requestId"]);
+            var jsonElement = (JsonElement)jsonObject["object"];
+            var objectData = JsonElementToDictionary(jsonElement);
+
+            if (_subscriptions.TryGetValue(requestId, out var subscription))
+            {
+                var obj = ParseClient.Instance.Decoder.Decode(objectData, ParseClient.Instance.Services);
+
+                _objectEventSubject.OnNext((subscriptionEvent, obj, subscription));
+            }
+
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error in HandleObjectEvent: {ex.Message}");
+            _errorSubject.OnNext(new LiveQueryException.UnknownException("Error handling object event", ex));
+        }
+    }
+
     private void HandleSubscribedEvent(Dictionary<string, object> jsonObject)
     {
         if (jsonObject.TryGetValue("requestId", out var requestIdObj) &&
@@ -425,30 +447,6 @@ public class ParseLiveQueryClient :IDisposable
             }
             subscription.DidUnsubscribe(subscription.QueryObj);
             _unsubscribedSubject.OnNext((requestId, subscription));
-        }
-    }
-
-
-    private void HandleObjectEvent(Subscription.Event subscriptionEvent, Dictionary<string, object> jsonObject)
-    {
-        try
-        {
-            int requestId = Convert.ToInt32(jsonObject["requestId"]);
-            var jsonElement = (JsonElement)jsonObject["object"];
-            var objectData = JsonElementToDictionary(jsonElement);
-            
-            if (_subscriptions.TryGetValue(requestId, out var subscription))
-            {
-                var obj = ParseClient.Instance.Decoder.Decode(objectData, ParseClient.Instance.Services);
-
-                _objectEventSubject.OnNext((subscriptionEvent, obj, subscription));
-            }
-
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Error in HandleObjectEvent: {ex.Message}");
-            _errorSubject.OnNext(new LiveQueryException.UnknownException("Error handling object event", ex));
         }
     }
 
@@ -541,7 +539,7 @@ public class ParseLiveQueryClient :IDisposable
         if (disposing)
         {
             
-            await Disconnect();
+            await DisconnectAsync();
             await RemoveAllSubscriptions();
 
             _connectedSubject.Dispose();
@@ -660,214 +658,3 @@ public enum LiveQueryConnectionState
     Failed 
 }
 
-
-
-public static class ObjectMapper
-{
-    public static T MapFromDictionary<T>(IDictionary<string, object> source) where T : class
-    {
-        try
-        {
-            
-            
-            T target = (T)Activator.CreateInstance(typeof(T));
-
-            if (target == null)
-            {
-                Debug.WriteLine($"Warning: Could not create an instance of {typeof(T).Name}. Ensure it has a public parameterless constructor.");
-                return null; 
-            }
-
-            
-            var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Where(p => p.CanWrite)
-                .ToDictionary(p => p.Name, p => p, StringComparer.OrdinalIgnoreCase);
-
-            
-            List<string> unmatchedKeys = new();
-
-            foreach (var kvp in source)
-            {
-                if (properties.TryGetValue(kvp.Key, out var property))
-                {
-                    try
-                    {
-                        if (kvp.Value != null && property.PropertyType.IsInstanceOfType(kvp.Value))
-                        {
-                            property.SetValue(target, kvp.Value);
-                        }
-                        else if (kvp.Value != null)
-                        {
-                            var convertedValue = Convert.ChangeType(kvp.Value, property.PropertyType);
-                            property.SetValue(target, convertedValue);
-                        }
-
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Failed to set property {property.Name} on {typeof(T).Name}: {ex.Message}");
-                    }
-                }
-                else
-                {
-                    
-                    unmatchedKeys.Add(kvp.Key);
-                }
-            }
-
-            
-            if (unmatchedKeys.Count > 0)
-            {
-                Debug.WriteLine($"Unmatched Keys for {typeof(T).Name}:");
-                foreach (var key in unmatchedKeys)
-                {
-                    Debug.WriteLine($"- {key}");
-                }
-            }
-
-            return target;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Error creating instance of {typeof(T).Name}: {ex.Message}");
-            return null; 
-        }
-    }
-
-    public static Dictionary<string, object> ClassToDictionary<T>(T obj) where T : class
-    {
-        if (obj == null)
-        {
-            return Enumerable.Empty<KeyValuePair<string, object>>().ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        }
-
-        var dictionary = new Dictionary<string, object>();
-        var properties = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
-
-        foreach (var property in properties)
-        {
-            string name = property.Name;
-            object value = property.GetValue(obj);
-
-            if (value != null)
-            {
-                dictionary[name] = ConvertValueForDictionary(value);
-            }
-        }
-
-        return dictionary;
-    }
-
-    private static object ConvertValueForDictionary(object value)
-    {
-        if (value == null)
-        {
-            return null;
-        }
-
-        
-
-        
-        if (value is ParseObject parseObject && !string.IsNullOrEmpty(parseObject.ObjectId))
-        {
-            return new Dictionary<string, object>
-            {
-                { "__type", "Pointer" },
-                { "className", parseObject.ClassName },
-                { "objectId", parseObject.ObjectId }
-            };
-        }
-
-        
-        if (value is ParseFile parseFile && !string.IsNullOrEmpty(parseFile.Name) && parseFile.DataStream != null)
-        {
-            using var memoryStream = new MemoryStream();
-            parseFile.DataStream.CopyTo(memoryStream);
-            return new Dictionary<string, object>
-            {
-                { "__type", "File" },
-                { "name", parseFile.Name },
-                
-                { "_ContentType", parseFile.MimeType }, 
-                { "_Base64", Convert.ToBase64String(memoryStream.ToArray()) }
-            };
-        }
-
-        
-        if (value is ParseGeoPoint geoPoint)
-        {
-            return new Dictionary<string, object>
-            {
-                { "__type", "GeoPoint" },
-                { "latitude", geoPoint.Latitude },
-                { "longitude", geoPoint.Longitude }
-            };
-        }
-
-        Type valueType = value.GetType();
-
-        if (valueType.IsPrimitive || value is string)
-        {
-            return value;
-        }
-
-        if (value is DateTime dateTime)
-        {
-            return new Dictionary<string, object>
-            {
-                { "__type", "Date" },
-                { "iso", dateTime.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ") }
-            };
-        }
-
-        if (value is byte[] byteArray)
-        {
-            return new Dictionary<string, object>
-            {
-                { "__type", "Bytes" },
-                { "base64", Convert.ToBase64String(byteArray) }
-            };
-        }
-
-        if (value is Stream stream)
-        {
-            using var memoryStream = new MemoryStream();
-            stream.CopyTo(memoryStream);
-            return new Dictionary<string, object>
-            {
-                { "__type", "Bytes" },
-                { "base64", Convert.ToBase64String(memoryStream.ToArray()) }
-            };
-        }
-
-        if (value is IList list&&list is not null) 
-        {
-            var convertedList = new List<object>();
-            foreach (var item in list)
-            {
-                convertedList.Add(ConvertValueForDictionary(item));
-            }
-
-            return convertedList;
-        }
-
-        if (value is IDictionary dictionary)
-        {
-            var convertedDictionary = new Dictionary<string, object>();
-            foreach (var key in dictionary.Keys)
-            {
-                convertedDictionary[key.ToString()] = ConvertValueForDictionary(dictionary[key]);
-            }
-            return convertedDictionary;
-        }
-
-
-        if (value is not string && value.GetType().IsClass)
-        {
-            return ClassToDictionary(value);
-        }
-
-        return value?.ToString(); 
-    }
-    
-}

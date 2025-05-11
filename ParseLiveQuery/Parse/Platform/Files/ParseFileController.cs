@@ -9,67 +9,62 @@ using Parse.Abstractions.Platform.Files;
 using Parse.Infrastructure.Execution;
 
 namespace Parse.Platform.Files;
-
 public class ParseFileController : IParseFileController
 {
-    private IParseCommandRunner CommandRunner { get; }
+    private IParseCommandRunner _runner;
+    public ParseFileController(IParseCommandRunner commandRunner)
+        => _runner = commandRunner;
 
-    public ParseFileController(IParseCommandRunner commandRunner) => CommandRunner = commandRunner;
-
-    public async Task<FileState> SaveAsync(FileState state, Stream dataStream, string sessionToken, IProgress<IDataTransferLevel> progress, CancellationToken cancellationToken = default)
+    public async Task<FileState> SaveAsync(
+        FileState state,
+        Stream dataStream,
+        string sessionToken,
+        IProgress<IDataTransferLevel> progress,
+        CancellationToken cancellationToken = default)
     {
-        // If the file is already uploaded, no need to re-upload.
         if (state.Location != null)
             return state;
 
-        if (cancellationToken.IsCancellationRequested)
-            return await Task.FromCanceled<FileState>(cancellationToken);
-
-        long oldPosition = dataStream.Position;
+        cancellationToken.ThrowIfCancellationRequested();
+        var oldPos = dataStream.CanSeek ? dataStream.Position : 0L;
 
         try
         {
-            // Execute the file upload command
-            var result = await CommandRunner.RunCommandAsync(
-                new ParseCommand($"files/{state.Name}", method: "POST", sessionToken: sessionToken, contentType: state.MediaType, stream: dataStream),
+            var (status, json) = await _runner.RunCommandAsync(
+                new ParseCommand($"files/{state.Name}",
+                                 method: "POST",
+                                 sessionToken: sessionToken,
+                                 contentType: state.MediaType,
+                                 stream: dataStream),
                 uploadProgress: progress,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
 
-            // Extract the result
-            var jsonData = result.Item2;
-
-            // Ensure the cancellation token hasn't been triggered during processing
             cancellationToken.ThrowIfCancellationRequested();
 
-            var name = jsonData["name"] as string;
-            var url = jsonData["url"] as string;
+            if (!json.TryGetValue("name", out var nObj) || !(nObj is string name) ||
+                !json.TryGetValue("url", out var uObj) || !(uObj is string url))
+                throw new InvalidDataException("Parse server returned bad file metadata.");
 
-            if (name == null || url == null)
-            {
-                throw new Exception("Incomplete result: missing 'name' or 'url'.");
-            }
             return new FileState
             {
-                Name = jsonData["name"] as string,
-                Location = new Uri(jsonData["url"] as string, UriKind.Absolute),
-                MediaType = state.MediaType
+                Name      = name,
+                Location  = new Uri(url, UriKind.Absolute),
+                MediaType = state.MediaType,
+                HttpCode= status,
             };
         }
         catch (OperationCanceledException)
         {
-            // Handle the cancellation properly, resetting the stream if it can seek
             if (dataStream.CanSeek)
-                dataStream.Seek(oldPosition, SeekOrigin.Begin);
-            
-            throw; // Re-throw to allow the caller to handle the cancellation
+                dataStream.Seek(oldPos, SeekOrigin.Begin);
+            throw;
         }
-        catch (Exception)
+        catch
         {
-            // If an error occurs, reset the stream position and rethrow
             if (dataStream.CanSeek)
-                dataStream.Seek(oldPosition, SeekOrigin.Begin);
-            
-            throw; // Re-throw to allow the caller to handle the error
+                dataStream.Seek(oldPos, SeekOrigin.Begin);
+            throw;
         }
     }
 }

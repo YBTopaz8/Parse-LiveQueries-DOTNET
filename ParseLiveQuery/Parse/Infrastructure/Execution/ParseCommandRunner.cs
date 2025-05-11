@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Parse.Abstractions.Infrastructure;
@@ -62,9 +63,7 @@ public class ParseCommandRunner : IParseCommandRunner
         var preparedCommand = await PrepareCommand(command).ConfigureAwait(false);
 
         // Execute the command
-        var response = await GetWebClient()
-            .ExecuteAsync(preparedCommand, uploadProgress, downloadProgress, cancellationToken)
-            .ConfigureAwait(false);
+        var response = await GetWebClient().ExecuteAsync(preparedCommand, uploadProgress, downloadProgress, cancellationToken).ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -75,6 +74,10 @@ public class ParseCommandRunner : IParseCommandRunner
         var responseCode = (int) statusCode;
 
 
+        if (responseCode <= 100 && responseCode <200)
+        {
+            
+        }
         if (responseCode == 200)
         {
             
@@ -85,7 +88,23 @@ public class ParseCommandRunner : IParseCommandRunner
         }
         else if (responseCode == 400)
         {
-            throw new ParseFailureException(ParseFailureException.ErrorCode.BadRequest, content);
+            ParseErrorPayload payload = null;
+            try
+            {
+                payload = JsonSerializer.Deserialize<ParseErrorPayload>(content);
+            }
+            catch (JsonException)
+            {
+                throw new ParseFailureException(
+                    ParseFailureException.ErrorCode.BadRequest,
+                    "Bad Request: unable to parse error payload");
+            }
+
+            ParseFailureException.ErrorCode code = (ParseFailureException.ErrorCode)payload.code;
+           
+         
+            throw new ParseFailureException(code: code, payload.error);
+            
         }
         else if (responseCode == 401)
         {

@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 
 namespace Parse.Platform.Files;
 
@@ -11,6 +12,7 @@ public class FileState
     public string MediaType { get; set; }
 
     public Uri Location { get; set; }
+    public HttpStatusCode HttpCode { get; set; }
 
     /// <summary>
     /// Converts the file's location to a secure HTTPS location if applicable.

@@ -271,3 +271,8 @@ public class ParseFailureException : Exception
     /// </summary>
     public ErrorCode Code { get; private set; }
 }
+public class ParseErrorPayload
+{
+    public int code { get; set; }
+    public string error { get; set; }
+}

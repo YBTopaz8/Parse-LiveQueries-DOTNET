@@ -42,7 +42,7 @@ public class UniversalWebClient : IWebClient
     WebRequest httpRequest,
     IProgress<IDataTransferLevel> uploadProgress,
     IProgress<IDataTransferLevel> downloadProgress,
-    CancellationToken cancellationToken)
+    CancellationToken cancellationToken=default)
     {
         uploadProgress ??= new Progress<IDataTransferLevel> { };
         downloadProgress ??= new Progress<IDataTransferLevel> { };
@@ -122,7 +122,7 @@ public class UniversalWebClient : IWebClient
         }
         finally
         {
-            resultStream.Dispose();
+           await resultStream.DisposeAsync();
         }
     }
 }

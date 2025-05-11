@@ -164,6 +164,7 @@ public static class UserServiceExtensions
     /// </summary>
     internal static async Task<ParseUser> GetCurrentUserAsync(this IServiceHub serviceHub, CancellationToken cancellationToken = default)
     {
+        
         var user = await serviceHub.CurrentUserController.GetAsync(serviceHub, cancellationToken);
         return user;
     }
