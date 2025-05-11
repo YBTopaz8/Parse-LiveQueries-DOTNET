@@ -638,9 +638,9 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// Saves this object to the server.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
-    public Task SaveAsync(CancellationToken cancellationToken = default)
+    public async Task SaveAsync(CancellationToken cancellationToken = default)
     {
-        return TaskQueue.Enqueue(toAwait => SaveAsync(toAwait, cancellationToken), cancellationToken);
+        await TaskQueue.Enqueue(toAwait => SaveAsync(toAwait, cancellationToken), cancellationToken);        
     }
 
     /// <summary>

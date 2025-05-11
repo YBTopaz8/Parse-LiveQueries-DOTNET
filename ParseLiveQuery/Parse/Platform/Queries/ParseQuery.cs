@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Drawing;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -398,6 +399,26 @@ public class ParseQuery<T> where T : ParseObject
     public ParseQuery<T> WhereEqualTo(string key, object value)
     {
         return new ParseQuery<T>(this, where: new Dictionary<string, object> { { key, value } });
+    }
+    /// <summary>
+    /// Constrains an array field so that its length equals <paramref name="size"/>.
+    /// </summary>
+    /// <param name="key">The array field to check.</param>
+    /// <param name="size">The exact length the array must have (>= 0).</param>
+    /// <returns>A new query with the $size constraint.</returns>
+    public ParseQuery<T> WhereSizeEqualTo(string key, int size)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Key must not be null or empty.", nameof(key));
+        if (size < 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Size must be non-negative.");
+
+        // Build { key: { "$size": size } }
+        var clause = new Dictionary<string, object>
+        {
+            [key] = new Dictionary<string, object> { ["$size"] = size }
+        };
+        return new ParseQuery<T>(this, where: clause);
     }
 
     /// <summary>
