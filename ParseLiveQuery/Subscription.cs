@@ -283,7 +283,7 @@ public abstract class Subscription : IDisposable
             UnsubscribeInternal();
             return;
         }
-
+        _unsubscribeCts.Dispose();
         _unsubscribeCts = new CancellationTokenSource();
         Task.Delay(TimeSpan.FromMinutes(timeInMinutes), _unsubscribeCts.Token)
             .ContinueWith(t =>
