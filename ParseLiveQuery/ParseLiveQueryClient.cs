@@ -44,7 +44,7 @@ public class ParseLiveQueryClient :IDisposable
     private readonly Subject<LiveQueryException> _errorSubject = new();
     private readonly Subject<(int requestId, Subscription subscription)> _subscribedSubject = new();
     private readonly Subject<(int requestId, Subscription subscription)> _unsubscribedSubject = new();
-    private readonly Subject<(Subscription.Event evt, object objectData, Subscription subscription)> _objectEventSubject = new();
+    private readonly Subject<(Subscription.Event evt, ParseObject objectData, Subscription subscription)> _objectEventSubject = new();
 
     
 
@@ -55,7 +55,7 @@ public class ParseLiveQueryClient :IDisposable
     public IObservable<LiveQueryException> OnError => _errorSubject.AsObservable();
     public IObservable<(int requestId, Subscription subscription)> OnSubscribed => _subscribedSubject.AsObservable();
     public IObservable<(int requestId, Subscription subscription)> OnUnsubscribed => _unsubscribedSubject.AsObservable();
-    public IObservable<(Subscription.Event evt, object objectData, Subscription subscription)> OnObjectEvent => _objectEventSubject.AsObservable();
+    public IObservable<(Subscription.Event evt, ParseObject objectData, Subscription subscription)> OnObjectEvent => _objectEventSubject.AsObservable();
 
 
 
@@ -408,7 +408,7 @@ public class ParseLiveQueryClient :IDisposable
 
             if (_subscriptions.TryGetValue(requestId, out var subscription))
             {
-                var obj = ParseClient.Instance.Decoder.Decode(objectData, ParseClient.Instance.Services);
+                var obj = ParseClient.Instance.Decoder.Decode(objectData, ParseClient.Instance.Services) as ParseObject;
 
                 _objectEventSubject.OnNext((subscriptionEvent, obj, subscription));
             }
