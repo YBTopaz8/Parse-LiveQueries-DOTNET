@@ -6,14 +6,9 @@ using System.Reactive.Subjects;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Parse.Abstractions.Platform.Objects;
-using Parse.Infrastructure.Utilities;
 using System.Diagnostics;
 using YB.Parse.LiveQuery;
-using System.IO;
-using System.Reflection;
 using System.Linq;
-using System.Collections;
 
 namespace Parse.LiveQuery;
 public class ParseLiveQueryClient :IDisposable
