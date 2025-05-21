@@ -18,7 +18,7 @@ public class ParseSetOperation : IParseFieldOperation
     {
         if (serviceHub == null)
         {
-            throw new InvalidOperationException("ServiceHub is required to encode the value.");
+            throw new InvalidOperationException("ServiceHub is to encode the value.");
         }
 
         var encodedValue = PointerOrLocalIdEncoder.Instance.Encode(Value, serviceHub);
