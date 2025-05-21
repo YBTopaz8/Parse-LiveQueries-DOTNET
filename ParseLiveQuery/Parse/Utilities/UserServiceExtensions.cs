@@ -294,13 +294,6 @@ public static class UserServiceExtensions
         ParseUser.Authenticators[provider.AuthType] = provider;
         ParseUser curUser = await GetCurrentUser(serviceHub);
 
-        if (curUser != null)
-        {
-#pragma warning disable CS1030 // #warning directive
-#warning Check if SynchronizeAllAuthData should accept an IServiceHub for consistency on which actions take place on which IServiceHub implementation instance.
-
-            curUser.SynchronizeAuthData(provider);
-#pragma warning restore CS1030 // #warning directive
-        }
+        curUser?.SynchronizeAuthData(provider);
     }
 }
