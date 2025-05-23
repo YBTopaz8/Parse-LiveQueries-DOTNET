@@ -49,19 +49,19 @@ public class Subscription<T> : Subscription where T : ParseObject
     /// <summary>
     /// Gets an observable stream of subscription events (Create, Update, Delete, etc.).
     /// </summary>
-    public IQbservable<SubscriptionEvent<T>> Events => _eventStream.AsQbservable();
+    public IObservable<SubscriptionEvent<T>> Events => _eventStream.AsQbservable();
     /// <summary>
     /// Gets an observable stream of errors that occur during the subscription.
     /// </summary>
-    public IQbservable<LiveQueryException> Errors => _errorStream.AsQbservable();
+    public IObservable<LiveQueryException> Errors => _errorStream.AsQbservable();
     /// <summary>
     /// Gets an observable stream that emits the ParseQuery when the subscription is successfully established.
     /// </summary>
-    public IQbservable<ParseQuery<T>> Subscribes => _subscribeStream.AsQbservable();
+    public IObservable<ParseQuery<T>> Subscribes => _subscribeStream.AsQbservable();
     /// <summary>
     /// Gets an observable stream that emits the ParseQuery when the subscription is terminated.
     /// </summary>
-    public IQbservable<ParseQuery<T>> Unsubscribes => _unsubscribeStream.AsQbservable();
+    public IObservable<ParseQuery<T>> Unsubscribes => _unsubscribeStream.AsQbservable();
 
     /// <summary>
     /// internal Name of subscription (optional)
