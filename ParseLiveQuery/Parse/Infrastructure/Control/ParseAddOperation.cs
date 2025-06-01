@@ -14,7 +14,7 @@ public class ParseAddOperation : IParseFieldOperation
     ReadOnlyCollection<object> Data { get; }
 
     public ParseAddOperation(IEnumerable<object> objects) =>
-        Data = new ReadOnlyCollection<object>(objects.Distinct().ToList()); // Ensures no duplicates within this operation
+        Data = new ReadOnlyCollection<object>([.. objects.Distinct()]); // Ensures no duplicates within this operation
 
     public IParseFieldOperation MergeWithPrevious(IParseFieldOperation previous)
     {

@@ -22,8 +22,8 @@ public class ParseRelationOperation : IParseFieldOperation
     ParseRelationOperation(IParseObjectClassController classController, IEnumerable<string> adds, IEnumerable<string> removes, string targetClassName) : this(classController)
     {
         TargetClassName = targetClassName;
-        Additions = new ReadOnlyCollection<string>(adds.ToList());
-        Removals = new ReadOnlyCollection<string>(removes.ToList());
+        Additions = new ReadOnlyCollection<string>([.. adds]);
+        Removals = new ReadOnlyCollection<string>([.. removes]);
     }
 
     public ParseRelationOperation(IParseObjectClassController classController, IEnumerable<ParseObject> adds, IEnumerable<ParseObject> removes) : this(classController)
@@ -32,8 +32,8 @@ public class ParseRelationOperation : IParseFieldOperation
         removes ??= new ParseObject[0];
 
         TargetClassName = adds.Concat(removes).Select(entity => entity.ClassName).FirstOrDefault();
-        Additions = new ReadOnlyCollection<string>(GetIdsFromObjects(adds).ToList());
-        Removals = new ReadOnlyCollection<string>(GetIdsFromObjects(removes).ToList());
+        Additions = new ReadOnlyCollection<string>([.. GetIdsFromObjects(adds)]);
+        Removals = new ReadOnlyCollection<string>([.. GetIdsFromObjects(removes)]);
     }
 
     public IParseFieldOperation MergeWithPrevious(IParseFieldOperation previous)
@@ -84,7 +84,7 @@ public class ParseRelationOperation : IParseFieldOperation
 
     public object ConvertToJSON(IServiceHub serviceHub = null)
     {
-        List<object> additions = Additions.Select(id => PointerOrLocalIdEncoder.Instance.Encode(ClassController.CreateObjectWithoutData(TargetClassName, id, serviceHub), serviceHub)).ToList(), removals = Removals.Select(id => PointerOrLocalIdEncoder.Instance.Encode(ClassController.CreateObjectWithoutData(TargetClassName, id, serviceHub), serviceHub)).ToList();
+        List<object> additions = [.. Additions.Select(id => PointerOrLocalIdEncoder.Instance.Encode(ClassController.CreateObjectWithoutData(TargetClassName, id, serviceHub), serviceHub))], removals = [.. Removals.Select(id => PointerOrLocalIdEncoder.Instance.Encode(ClassController.CreateObjectWithoutData(TargetClassName, id, serviceHub), serviceHub))];
 
         Dictionary<string, object> addition = additions.Count == 0 ? default : new Dictionary<string, object>
         {

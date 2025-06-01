@@ -91,7 +91,7 @@ public class ParseQuery<T> where T : ParseObject
         Services = source.Services;
         ClassName = source.ClassName;
         Filters = source.Filters;
-        Orderings = replacementOrderBy is null ? source.Orderings : new ReadOnlyCollection<string>(replacementOrderBy.ToList());
+        Orderings = replacementOrderBy is null ? source.Orderings : new ReadOnlyCollection<string>([.. replacementOrderBy]);
 
         // 0 could be handled differently from null.
 
@@ -123,12 +123,12 @@ public class ParseQuery<T> where T : ParseObject
 
         if (includes is { })
         {
-            Includes = new ReadOnlyCollection<string>(MergeIncludes(includes).ToList());
+            Includes = new ReadOnlyCollection<string>([.. MergeIncludes(includes)]);
         }
 
         if (selectedKeys is { })
         {
-            KeySelections = new ReadOnlyCollection<string>(MergeSelectedKeys(selectedKeys).ToList());
+            KeySelections = new ReadOnlyCollection<string>([.. MergeSelectedKeys(selectedKeys)]);
         }
     }
 
@@ -871,15 +871,15 @@ public class ParseQuery<T> where T : ParseObject
         if (Filters != null)
             result["where"] = PointerOrLocalIdEncoder.Instance.Encode(Filters, Services);
         if (Orderings != null)
-            result["order"] = String.Join(",", Orderings.ToArray());
+            result["order"] = String.Join(",", [.. Orderings]);
         if (SkipAmount != null)
             result["skip"] = SkipAmount.Value;
         if (LimitAmount != null)
             result["limit"] = LimitAmount.Value;
         if (Includes != null)
-            result["include"] = String.Join(",", Includes.ToArray());
+            result["include"] = String.Join(",", [.. Includes]);
         if (KeySelections != null)
-            result["keys"] = String.Join(",", KeySelections.ToArray());
+            result["keys"] = String.Join(",", [.. KeySelections]);
         if (includeClassName)
             result["className"] = ClassName;
         if (RedirectClassNameForKey != null)

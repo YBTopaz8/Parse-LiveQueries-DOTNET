@@ -42,8 +42,7 @@ public class ParseCurrentUserController : IParseCurrentUserController
     {
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         var random = new Random();
-        return new string(Enumerable.Repeat(chars, 10)
-            .Select(s => s[random.Next(s.Length)]).ToArray());
+        return new string([.. Enumerable.Repeat(chars, 10).Select(s => s[random.Next(s.Length)])]);
     }
 
     public async Task<ParseUser> SetAsync(ParseUser user, CancellationToken cancellationToken)
@@ -121,9 +120,15 @@ public class ParseCurrentUserController : IParseCurrentUserController
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    public bool IsCurrent(ParseUser user) => CurrentUser == user;
+    public bool IsCurrent(ParseUser user)
+    {
+        return CurrentUser == user;
+    }
 
-    public void ClearFromMemory() => CurrentUser = null;
+    public void ClearFromMemory()
+    {
+        CurrentUser = null;
+    }
 
     public async Task ClearFromDiskAsync()
     {

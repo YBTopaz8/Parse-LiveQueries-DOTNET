@@ -43,7 +43,10 @@ public class ParseUser : ParseObject
 
     }
 
-    protected override bool CheckKeyMutable(string key) => !ImmutableKeys.Contains(key);
+    protected override bool CheckKeyMutable(string key)
+    {
+        return !ImmutableKeys.Contains(key);
+    }
 
     internal override void HandleSave(IObjectState serverState)
     {

@@ -193,13 +193,28 @@ public class CacheController : IDiskFileCacheController
             }
             await SaveAsync().ConfigureAwait(false);
         }
-    
 
-    // Unsupported synchronous modifications
-    public void Add(string key, object value) => throw new NotSupportedException(FileBackedCacheSynchronousMutationNotSupportedMessage);
-        public bool Remove(string key) => throw new NotSupportedException(FileBackedCacheSynchronousMutationNotSupportedMessage);
-        public void Add(KeyValuePair<string, object> item) => throw new NotSupportedException(FileBackedCacheSynchronousMutationNotSupportedMessage);
-        public bool Remove(KeyValuePair<string, object> item) => throw new NotSupportedException(FileBackedCacheSynchronousMutationNotSupportedMessage);
+
+        // Unsupported synchronous modifications
+        public void Add(string key, object value)
+        {
+            throw new NotSupportedException(FileBackedCacheSynchronousMutationNotSupportedMessage);
+        }
+
+        public bool Remove(string key)
+        {
+            throw new NotSupportedException(FileBackedCacheSynchronousMutationNotSupportedMessage);
+        }
+
+        public void Add(KeyValuePair<string, object> item)
+        {
+            throw new NotSupportedException(FileBackedCacheSynchronousMutationNotSupportedMessage);
+        }
+
+        public bool Remove(KeyValuePair<string, object> item)
+        {
+            throw new NotSupportedException(FileBackedCacheSynchronousMutationNotSupportedMessage);
+        }
 
         public bool ContainsKey(string key)
         {
@@ -425,7 +440,10 @@ public class CacheController : IDiskFileCacheController
         {
             private readonly SemaphoreSlim _sem;
             public Releaser(SemaphoreSlim sem) => _sem = sem;
-            public void Dispose() => _sem.Release();
+            public void Dispose()
+            {
+                _sem.Release();
+            }
         }
     }
 }

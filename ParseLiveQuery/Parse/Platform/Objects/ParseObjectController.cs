@@ -95,7 +95,7 @@ public class ParseObjectController : IParseObjectController
 
     public IEnumerable<Task> DeleteAllAsync(IEnumerable<IObjectState> states, string sessionToken, CancellationToken cancellationToken = default)
     {
-        return ExecuteBatchRequests(states.Where(item => item.ObjectId is { }).Select(item => new ParseCommand($"classes/{Uri.EscapeDataString(item.ClassName)}/{Uri.EscapeDataString(item.ObjectId)}", method: "DELETE", data: default)).ToList(), sessionToken, cancellationToken).Cast<Task>().ToList();
+        return ExecuteBatchRequests([.. states.Where(item => item.ObjectId is { }).Select(item => new ParseCommand($"classes/{Uri.EscapeDataString(item.ClassName)}/{Uri.EscapeDataString(item.ObjectId)}", method: "DELETE", data: default))], sessionToken, cancellationToken).Cast<Task>().ToList();
     }
 
     int MaximumBatchSize { get; } = 50;
@@ -111,14 +111,14 @@ public class ParseObjectController : IParseObjectController
 
         while (batchSize > MaximumBatchSize)
         {
-            List<ParseCommand> process = remaining.Take(MaximumBatchSize).ToList();
+            List<ParseCommand> process = [.. remaining.Take(MaximumBatchSize)];
 
             remaining = remaining.Skip(MaximumBatchSize);
             tasks.AddRange(ExecuteBatchRequest(process, sessionToken, cancellationToken));
             batchSize = remaining.Count();
         }
 
-        tasks.AddRange(ExecuteBatchRequest(remaining.ToList(), sessionToken, cancellationToken));
+        tasks.AddRange(ExecuteBatchRequest([.. remaining], sessionToken, cancellationToken));
         return tasks;
     }
 
@@ -137,7 +137,7 @@ public class ParseObjectController : IParseObjectController
             tasks.Add(tcs.Task);
         }
 
-        List<object> encodedRequests = requests.Select(request =>
+        List<object> encodedRequests = [.. requests.Select(request =>
         {
             Dictionary<string, object> results = new Dictionary<string, object>
             {
@@ -149,7 +149,7 @@ public class ParseObjectController : IParseObjectController
                 results["body"] = request.DataObject;
 
             return results;
-        }).Cast<object>().ToList();
+        }).Cast<object>()];
 
         ParseCommand command = new ParseCommand("batch", method: "POST", sessionToken: sessionToken, data: new Dictionary<string, object> { [nameof(requests)] = encodedRequests });
 

@@ -40,8 +40,7 @@ public class FlexibleDictionaryWrapper<TOut, TIn> : IDictionary<string, TOut>
         return result;
     }
 
-    public ICollection<TOut> Values => toWrap.Values
-                .Select(item => (TOut) Conversion.ConvertTo<TOut>(item)).ToList();
+    public ICollection<TOut> Values => [.. toWrap.Values.Select(item => (TOut) Conversion.ConvertTo<TOut>(item))];
 
     public TOut this[string key]
     {

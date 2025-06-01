@@ -146,7 +146,7 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
 
     internal static string BuildQueryString(IDictionary<string, object> parameters)
     {
-        return String.Join("&", (from pair in parameters let valueString = pair.Value as string select $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(String.IsNullOrEmpty(valueString) ? JsonUtilities.Encode(pair.Value) : valueString)}").ToArray());
+        return String.Join("&", [.. (from pair in parameters let valueString = pair.Value as string select $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(String.IsNullOrEmpty(valueString) ? JsonUtilities.Encode(pair.Value) : valueString)}")]);
     }
 
     internal static IDictionary<string, string> DecodeQueryString(string queryString)

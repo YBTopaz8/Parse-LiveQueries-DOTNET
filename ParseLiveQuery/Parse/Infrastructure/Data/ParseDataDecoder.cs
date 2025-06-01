@@ -60,8 +60,10 @@ public class ParseDataDecoder : IParseDataDecoder
         
     }
 
-    protected virtual object DecodePointer(string className, string objectId, IServiceHub serviceHub) =>
-        ClassController.CreateObjectWithoutData(className, objectId, serviceHub);
+    protected virtual object DecodePointer(string className, string objectId, IServiceHub serviceHub)
+    {
+        return ClassController.CreateObjectWithoutData(className, objectId, serviceHub);
+    }
 
     public static DateTime? ParseDate(string input)
     {

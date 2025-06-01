@@ -13,28 +13,36 @@ public static class InternalExtensions
     /// <summary>
     /// Ensures a task (even null) is awaitable.
     /// </summary>
-    public static Task<T> Safe<T>(this Task<T> task) =>
-        task ?? Task.FromResult(default(T));
+    public static Task<T> Safe<T>(this Task<T> task)
+    {
+        return task ?? Task.FromResult(default(T));
+    }
 
     /// <summary>
     /// Ensures a task (even null) is awaitable.
     /// </summary>
-    public static Task Safe(this Task task) =>
-        task ?? Task.CompletedTask;
+    public static Task Safe(this Task task)
+    {
+        return task ?? Task.CompletedTask;
+    }
 
     public delegate void PartialAccessor<T>(ref T arg);
 
     /// <summary>
     /// Gets the value from a dictionary or returns the default value if the key is not found.
     /// </summary>
-    public static TValue GetOrDefault<TKey, TValue>(this IDictionary<TKey, TValue> self, TKey key, TValue defaultValue) =>
-        self.TryGetValue(key, out var value) ? value : defaultValue;
+    public static TValue GetOrDefault<TKey, TValue>(this IDictionary<TKey, TValue> self, TKey key, TValue defaultValue)
+    {
+        return self.TryGetValue(key, out var value) ? value : defaultValue;
+    }
 
     /// <summary>
     /// Compares two collections for equality.
     /// </summary>
-    public static bool CollectionsEqual<T>(this IEnumerable<T> a, IEnumerable<T> b) =>
-        ReferenceEquals(a, b) || (a != null && b != null && a.SequenceEqual(b));
+    public static bool CollectionsEqual<T>(this IEnumerable<T> a, IEnumerable<T> b)
+    {
+        return ReferenceEquals(a, b) || (a != null && b != null && a.SequenceEqual(b));
+    }
 
     /// <summary>
     /// Executes a continuation on a task that returns a result on success.

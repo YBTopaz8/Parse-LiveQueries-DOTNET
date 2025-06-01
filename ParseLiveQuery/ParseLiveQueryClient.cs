@@ -514,9 +514,15 @@ public class ParseLiveQueryClient :IDisposable
         }
     }
 
-    private void OnWebSocketClosed() => _disconnectedSubject.OnNext((this, _userInitiatedDisconnect));
+    private void OnWebSocketClosed()
+    {
+        _disconnectedSubject.OnNext((this, _userInitiatedDisconnect));
+    }
 
-    private void OnWebSocketError(Exception exception) => _errorSubject.OnNext(new LiveQueryException.UnknownException("Socket error", exception));
+    private void OnWebSocketError(Exception exception)
+    {
+        _errorSubject.OnNext(new LiveQueryException.UnknownException("Socket error", exception));
+    }
 
     public void Dispose()
     {

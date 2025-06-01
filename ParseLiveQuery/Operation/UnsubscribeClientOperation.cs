@@ -10,9 +10,12 @@ public class UnsubscribeClientOperation : IClientOperation {
         _requestId = requestId;
     }
 
-    public string ToJson() => JsonUtilities.Encode(new Dictionary<string, object>
+    public string ToJson()
     {
-        ["op"] = "unsubscribe",
-        ["requestId"] = _requestId
-    });
+        return JsonUtilities.Encode(new Dictionary<string, object>
+        {
+            ["op"] = "unsubscribe",
+            ["requestId"] = _requestId
+        });
+    }
 }

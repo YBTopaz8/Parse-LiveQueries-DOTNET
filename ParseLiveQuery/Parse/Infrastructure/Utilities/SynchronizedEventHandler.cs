@@ -64,7 +64,7 @@ public class SynchronizedEventHandler<T>
             toInvoke = Callbacks.ToList();
         }
 
-        List<Task<object>> invocations = toInvoke.Select(callback => callback.Item2.ContinueWhenAll(toContinue, _ => callback.Item1.DynamicInvoke(sender, args))).ToList();
+        List<Task<object>> invocations = [.. toInvoke.Select(callback => callback.Item2.ContinueWhenAll(toContinue, _ => callback.Item1.DynamicInvoke(sender, args)))];
         return Task.WhenAll(invocations);
     }
 }

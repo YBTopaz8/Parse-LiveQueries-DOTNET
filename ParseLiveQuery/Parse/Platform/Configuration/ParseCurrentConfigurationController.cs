@@ -57,5 +57,8 @@ internal class ParseCurrentConfigurationController : IParseCurrentConfigurationC
         await data.RemoveAsync(CurrentConfigurationKey);
     }
 
-    public Task ClearCurrentConfigInMemoryAsync() => Task.Run(() => _currentConfiguration = null);
+    public Task ClearCurrentConfigInMemoryAsync()
+    {
+        return Task.Run(() => _currentConfiguration = null);
+    }
 }

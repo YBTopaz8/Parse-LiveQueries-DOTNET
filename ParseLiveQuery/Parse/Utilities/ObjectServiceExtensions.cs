@@ -592,7 +592,7 @@ public static class ObjectServiceExtensions
             }
 
             // When all of the objects' queues are ready, signal fullTask that it's ready to go on.
-            Task.WhenAll(childTasks.ToArray()).ContinueWith((Task task) => readyToStart.SetResult(default));
+            Task.WhenAll([.. childTasks]).ContinueWith((Task task) => readyToStart.SetResult(default));
             return fullTask;
         }
         finally

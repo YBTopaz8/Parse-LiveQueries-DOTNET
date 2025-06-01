@@ -15,7 +15,7 @@ public class ParseRemoveOperation : IParseFieldOperation
     ReadOnlyCollection<object> Data { get; }
 
     public ParseRemoveOperation(IEnumerable<object> objects) =>
-        Data = new ReadOnlyCollection<object>(objects.Distinct().ToList()); // Ensure unique elements
+        Data = new ReadOnlyCollection<object>([.. objects.Distinct()]); // Ensure unique elements
 
     public IParseFieldOperation MergeWithPrevious(IParseFieldOperation previous)
     {
@@ -35,7 +35,7 @@ public class ParseRemoveOperation : IParseFieldOperation
     {
         // Remove the specified objects from the old value
         return oldValue is { }
-            ? Conversion.As<IList<object>>(oldValue).Except(Data, ParseFieldOperations.ParseObjectComparer).ToList()
+            ? [.. Conversion.As<IList<object>>(oldValue).Except(Data, ParseFieldOperations.ParseObjectComparer)]
             : new List<object> { }; // Return empty list if no previous value
     }
 

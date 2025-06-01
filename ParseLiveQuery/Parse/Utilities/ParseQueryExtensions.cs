@@ -318,20 +318,20 @@ public static class ParseQueryExtensions
                     {
                         if (methodCallOperand.Method.GetGenericMethodDefinition() == ContainsMethod)
                         {
-                            return Expression.Call(NotContainsMethod.MakeGenericMethod(methodCallOperand.Method.GetGenericArguments()), methodCallOperand.Arguments.ToArray());
+                            return Expression.Call(NotContainsMethod.MakeGenericMethod(methodCallOperand.Method.GetGenericArguments()), [.. methodCallOperand.Arguments]);
                         }
                         if (methodCallOperand.Method.GetGenericMethodDefinition() == NotContainsMethod)
                         {
-                            return Expression.Call(ContainsMethod.MakeGenericMethod(methodCallOperand.Method.GetGenericArguments()), methodCallOperand.Arguments.ToArray());
+                            return Expression.Call(ContainsMethod.MakeGenericMethod(methodCallOperand.Method.GetGenericArguments()), [.. methodCallOperand.Arguments]);
                         }
                     }
                     if (methodCallOperand.Method == ContainsKeyMethod)
                     {
-                        return Expression.Call(NotContainsKeyMethod, methodCallOperand.Arguments.ToArray());
+                        return Expression.Call(NotContainsKeyMethod, [.. methodCallOperand.Arguments]);
                     }
                     if (methodCallOperand.Method == NotContainsKeyMethod)
                     {
-                        return Expression.Call(ContainsKeyMethod, methodCallOperand.Arguments.ToArray());
+                        return Expression.Call(ContainsKeyMethod, [.. methodCallOperand.Arguments]);
                     }
                 }
             }
@@ -421,7 +421,7 @@ public static class ParseQueryExtensions
                 throw new InvalidOperationException("The left-hand side of a supported function call must be a ParseObject field access.");
             }
 
-            return translatedMethod.DeclaringType.GetGenericTypeDefinition().MakeGenericType(typeof(T)).GetRuntimeMethod(translatedMethod.Name, translatedMethod.GetParameters().Select(parameter => parameter.ParameterType).ToArray()).Invoke(source, new[] { GetValue(objTransformed.Arguments[0]), GetValue(node.Arguments[0]) }) as ParseQuery<T>;
+            return translatedMethod.DeclaringType.GetGenericTypeDefinition().MakeGenericType(typeof(T)).GetRuntimeMethod(translatedMethod.Name, [.. translatedMethod.GetParameters().Select(parameter => parameter.ParameterType)]).Invoke(source, new[] { GetValue(objTransformed.Arguments[0]), GetValue(node.Arguments[0]) }) as ParseQuery<T>;
         }
 
         if (node.Arguments[0] == expression.Parameters[0])

@@ -65,7 +65,13 @@ public class ExtendedParseQuery<T> where T : ParseObject
         return this;
     }
 
-    public ParseQuery<T> ToParseQuery() => _query;
+    public ParseQuery<T> ToParseQuery()
+    {
+        return _query;
+    }
 
-    public IDictionary<string, object> BuildParameters() => _query.BuildParameters();
+    public IDictionary<string, object> BuildParameters()
+    {
+        return _query.BuildParameters();
+    }
 }
