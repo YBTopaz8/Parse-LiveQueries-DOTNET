@@ -1,18 +1,23 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Net.WebSockets;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Diagnostics;
+
 using YB.Parse.LiveQuery;
-using System.Linq;
 
 namespace Parse.LiveQuery;
 public class ParseLiveQueryClient :IDisposable
 {
+
+    private readonly ConcurrentQueue<IClientOperation> _operationQueue = new();
+
     private bool _disposed;
 
     private readonly Uri _hostUri;
@@ -32,10 +37,10 @@ public class ParseLiveQueryClient :IDisposable
     
     private readonly ConcurrentDictionary<int, Subscription> _subscriptions = new();
     public IReadOnlyDictionary<int, Subscription> Subscriptions => _subscriptions;
+    private readonly Subject<DisconnectInfo> _disconnectedSubject = new();
+    public IObservable<DisconnectInfo> OnDisconnected => _disconnectedSubject.AsObservable();
 
-    
     private readonly Subject<ParseLiveQueryClient> _connectedSubject = new();
-    private readonly Subject<(ParseLiveQueryClient client, bool userInitiated)> _disconnectedSubject = new();
     private readonly Subject<LiveQueryException> _errorSubject = new();
     private readonly Subject<(int requestId, Subscription subscription)> _subscribedSubject = new();
     private readonly Subject<(int requestId, Subscription subscription)> _unsubscribedSubject = new();
@@ -46,7 +51,6 @@ public class ParseLiveQueryClient :IDisposable
     private readonly Subject<LiveQueryConnectionState> _connectionStateSubject = new();
     public IObservable<LiveQueryConnectionState> OnConnectionStateChanged => _connectionStateSubject.AsObservable();
     public IObservable<ParseLiveQueryClient> OnConnected => _connectedSubject.AsObservable();
-    public IObservable<(ParseLiveQueryClient client, bool userInitiated)> OnDisconnected => _disconnectedSubject.AsObservable();
     public IObservable<LiveQueryException> OnError => _errorSubject.AsObservable();
     public IObservable<(int requestId, Subscription subscription)> OnSubscribed => _subscribedSubject.AsObservable();
     public IObservable<(int requestId, Subscription subscription)> OnUnsubscribed => _unsubscribedSubject.AsObservable();
@@ -165,6 +169,16 @@ public class ParseLiveQueryClient :IDisposable
                 break;
         }
     }
+    private void OnWebSocketClosed(WebSocketCloseStatus? status, string? description)
+    {
+        var info = new DisconnectInfo(this, _userInitiatedDisconnect, status, description);
+        _disconnectedSubject.OnNext(info);
+
+        if (_clientState == ClientState.Started && !_userInitiatedDisconnect)
+        {
+            _ = ReconnectAsync();
+        }
+    }
 
     public async Task RemoveAllSubscriptions()
     {
@@ -249,7 +263,6 @@ public class ParseLiveQueryClient :IDisposable
 
         _userInitiatedDisconnect = true;
         _hasReceivedConnected = false;
-        _disconnectedSubject.OnNext((this, _userInitiatedDisconnect));
     }
 
 
@@ -294,8 +307,39 @@ public class ParseLiveQueryClient :IDisposable
     }
 
     private Task SendOperationAsync(IClientOperation operation)
+    {  
+        // If we are connected, send immediately.
+        if (IsConnected && _webSocketClient?.State == WebSocketState.Open)
+        {
+            return _taskQueue.Enqueue(async () => await _webSocketClient.SendAsync(operation.ToJson()));
+        }
+
+        // ADDED: If not connected, queue the operation for later.
+        _operationQueue.Enqueue(operation);
+        return Task.CompletedTask;
+    }
+
+
+    private async Task ProcessOperationQueueAsync()
     {
-        return _taskQueue.Enqueue(async () => await _webSocketClient.SendAsync(operation.ToJson()));
+        if (_operationQueue.IsEmpty)
+            return;
+
+        
+        while (_operationQueue.TryDequeue(out var operation))
+        {
+            try
+            {
+                // Send the queued operation. We add a small delay to avoid overwhelming the server on a fresh connection.
+                await SendOperationAsync(operation);
+                await Task.Delay(100); // Small buffer between queued messages
+            }
+            catch (Exception ex)
+            {
+            Debug.WriteLine($"Error sending queued operation: {ex.Message}");
+                // Depending on desired robustness, you could re-queue the failed operation.
+            }
+        }
     }
 
     private Task HandleOperationAsync(string message)
@@ -354,6 +398,8 @@ public class ParseLiveQueryClient :IDisposable
                     {
                        await SendSubscriptionAsync(subscription);
                     }
+
+                    await ProcessOperationQueueAsync();
                     break;
                 case "redirect":
                     
@@ -514,8 +560,6 @@ public class ParseLiveQueryClient :IDisposable
         }
     }
 
-    private void OnWebSocketClosed() => _disconnectedSubject.OnNext((this, _userInitiatedDisconnect));
-
     private void OnWebSocketError(Exception exception) => _errorSubject.OnNext(new LiveQueryException.UnknownException("Socket error", exception));
 
     public void Dispose()
@@ -606,12 +650,13 @@ public class ParseLiveQueryClient :IDisposable
             }
         }
 
-        public void OnClose()
+        public void OnClose(WebSocketCloseStatus? status, string? description)
         {
             _client._hasReceivedConnected = false;
-            _client.OnWebSocketClosed();
+            _client.OnWebSocketClosed(status, description);
         }
-
+        // --- ADD this new private method to ParseLiveQueryClient ---
+        
         public void OnError(Exception exception)
         {
             _client._hasReceivedConnected = false;
@@ -631,16 +676,49 @@ public class ParseLiveQueryClient :IDisposable
         }
     }
 
-        
+    /// <summary>
+    /// Explicitly starts the client, initiates connection, and enables auto-reconnection.
+    /// </summary>
+    public void Start()
+    {
+        ThrowIfDisposed();
+        if (_clientState == ClientState.Started)
+            return;
 
+        _clientState = ClientState.Started;
+        _userInitiatedDisconnect = false; // Reset disconnect flag
+        _ = ConnectIfNeededAsync(); // Start the connection loop
+    }
+    /// <summary>
+    /// Explicitly stops the client, disconnects, and disables auto-reconnection.
+    /// </summary>
+    public async Task StopAsync()
+    {
+        ThrowIfDisposed();
+        if (_clientState == ClientState.Stopped)
+            return;
+
+        _clientState = ClientState.Stopped;
+        _userInitiatedDisconnect = true; // This is a user-initiated stop
+        _operationQueue.Clear(); // Clear any pending operations
+        await DisconnectAsync();
+    }
+    private ClientState _clientState = ClientState.Stopped;
+    private enum ClientState { Stopped, Started, Disposed }
 }
 
-
+public record DisconnectInfo(
+    ParseLiveQueryClient Client,
+    bool UserInitiated,
+    WebSocketCloseStatus? CloseStatus,
+    string? Reason
+);
 public interface IWebSocketClientCallback
 {
     Task OnOpen();
     Task OnMessage(string message);
-    void OnClose();
+    //void OnClose();
+    void OnClose(WebSocketCloseStatus? status, string? description);
     void OnError(Exception exception);
     void OnStateChanged();
 }
@@ -652,4 +730,3 @@ public enum LiveQueryConnectionState
     Reconnecting,
     Failed 
 }
-

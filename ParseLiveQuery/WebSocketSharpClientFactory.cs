@@ -256,9 +256,11 @@ public class WebSocketClient : IWebSocketClient, IDisposable
                             break;
 
                         case WebSocketMessageType.Close:
-                            
-                            await HandleConnectionClosedOrFailedAsync("Server initiated close.");
-                            return; 
+
+                            var closeStatus = _webSocket.CloseStatus;
+                            var statusDescription = _webSocket.CloseStatusDescription;
+                            await HandleConnectionClosedOrFailedAsync("Server initiated close.", closeStatus, statusDescription); // Pass details
+                            return;
 
                         default:
                             
@@ -391,7 +393,8 @@ public class WebSocketClient : IWebSocketClient, IDisposable
     
     }
     
-    private async Task CloseInternalAsync(WebSocketCloseStatus closeStatus, string statusDescription, bool userInitiated, CancellationToken cancellationToken)
+    private async Task CloseInternalAsync(WebSocketCloseStatus closeStatus, string statusDescription,
+        bool userInitiated, CancellationToken cancellationToken)
     {
         if (_disposed)
         {
@@ -465,8 +468,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
         
         try
         {
-            
-            _webSocketClientCallback.OnClose();
+            _webSocketClientCallback.OnClose(closeStatus, statusDescription);
         }
         catch (Exception ex)
         {
@@ -475,11 +477,12 @@ public class WebSocketClient : IWebSocketClient, IDisposable
         }
     }
 
-    
-    private async Task HandleConnectionClosedOrFailedAsync(string reason)
+
+    private async Task HandleConnectionClosedOrFailedAsync(string reason, WebSocketCloseStatus? status = null, string? description = null)
     {
-        
-        
+
+
+
         await CloseInternalAsync(WebSocketCloseStatus.NormalClosure, reason, false, CancellationToken.None);
         
         if (State != WebSocketState.Closed)
