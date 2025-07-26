@@ -1124,6 +1124,12 @@ public class TestParseObject : ParseObject
     {
 
     }
+    [ParseFieldName("value")]
+    public int Value
+    {
+        get => GetProperty<int>();
+        set => SetProperty(value);
+    }
 }
 //so, I have mock difficulties, as it helps me understand the code better, bare with me!
 //but I will try to understand it better and come back to it later - Surely when I Mock Parse Live Queries.

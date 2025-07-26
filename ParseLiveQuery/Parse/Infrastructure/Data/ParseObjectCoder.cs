@@ -54,6 +54,13 @@ public class ParseObjectCoder
 
         // Extract key properties (existing logic)
         var objectId = Extract(mutableData, "objectId", obj => obj as string);
+
+        if (objectId != null)
+        {
+            serverData["objectId"] = objectId;
+        }
+
+        var className = Extract(mutableData, "className", obj => obj as string);
         var email = Extract(mutableData, "email", obj => obj as string);
         var username = Extract(mutableData, "username", obj => obj as string);
         var sessionToken = Extract(mutableData, "sessionToken", obj => obj as string);
@@ -100,6 +107,7 @@ public class ParseObjectCoder
 
         return new MutableObjectState
         {
+            ClassName= className,
             ObjectId = objectId,
             CreatedAt = createdAt,
             UpdatedAt = updatedAt,

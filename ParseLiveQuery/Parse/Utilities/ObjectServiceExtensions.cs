@@ -344,34 +344,35 @@ public static class ObjectServiceExtensions
      string defaultClassName,
      IServiceHub serviceHub) where T : ParseObject
     {
+
         if (state == null)
-        {
-            throw new ArgumentNullException(nameof(state), "The state cannot be null.");
-        }
+            throw new ArgumentNullException(nameof(state));
 
-        // Ensure the class name is determined or throw an exception
+        // Get the class name, but we won't use it for the constructor.
         string className = state.ClassName ?? defaultClassName;
-        if (string.IsNullOrEmpty(className))
-        {
 
-            throw new InvalidOperationException("Both state.ClassName and defaultClassName are null or empty. Unable to determine class name.");
+        // We can't call `new T(state)` directly due to generic constraints.
+        // We must use reflection to find and invoke our new internal constructor.
+
+        var constructor = typeof(T).GetConstructor(
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+            null,
+            new[] { typeof(IObjectState), typeof(IServiceHub) },
+            null
+        );
+
+        if (constructor == null)
+        {
+            // Fallback for subclasses that might not have this constructor.
+            // This preserves old behavior but our main path is the new one.
+            T obj = classController.Instantiate(className, serviceHub) as T;
+            obj.HandleFetchResult(state);
+            return obj;
         }
 
-        // Create the object using the class controller
-        T obj = classController.Instantiate(className, serviceHub) as T;
-
-        if (obj == null)
-        {
-
-            throw new InvalidOperationException($"Failed to instantiate object of type {typeof(T).Name} for class {className}.");
-        }
-
-        // Apply the state to the object
-        obj.HandleFetchResult(state);
-
-        return obj;
+        // This is the new, correct path.
+        return (T)constructor.Invoke(new object[] { state, serviceHub });
     }
-
     internal static IDictionary<string, object> GenerateJSONObjectForSaving(
     this IServiceHub serviceHub, IDictionary<string, IParseFieldOperation> operations)
     {

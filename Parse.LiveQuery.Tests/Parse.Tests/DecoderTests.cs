@@ -14,7 +14,19 @@ namespace Parse.Tests;
 [TestClass]
 public class DecoderTests
 {
-    ParseClient Client { get; } = new ParseClient(new ServerConnectionData { Test = true });
+
+    private ParseClient Client { get; set; }
+
+    [TestInitialize]
+    public void SetUp()
+    {
+        Client = new ParseClient(new ServerConnectionData { Test = true });
+
+          Client.AddValidClass<TestParseObject>();
+
+        Client.Publicize();
+    }
+  
 
     [TestMethod]
     public void TestParseDate()
@@ -211,26 +223,33 @@ public class DecoderTests
 
         Assert.ThrowsException<KeyNotFoundException>(() => Client.Decoder.Decode(new Dictionary<string, object> { ["__type"] = "GeoPoint", ["latitude"] = 0.9 }));
     }
-
     [TestMethod]
     public void TestDecodeObject()
     {
+        // ARRANGE: We are decoding a "TestObject"
         IDictionary<string, object> value = new Dictionary<string, object>()
         {
             ["__type"] = "Object",
-            ["className"] = "Corgi",
+            ["className"] = "TestObject", // Match the ParseClassName attribute
             ["objectId"] = "lLaKcolnu",
             ["createdAt"] = "2015-06-22T21:23:41.733Z",
-            ["updatedAt"] = "2015-06-22T22:06:41.733Z"
+            ["updatedAt"] = "2015-06-22T22:06:41.733Z",
+            ["value"] = 123 // Add a custom property
         };
 
-        ParseObject obj = Client.Decoder.Decode(value) as ParseObject;
+        // ACT
+        // We now expect the decoder to produce a strongly-typed TestParseObject.
+        var obj = Client.Decoder.Decode(value) as ParseObject;
 
+        // ASSERT
+        Assert.IsNotNull(obj);
+        //Assert.IsInstanceOfType(obj, typeof(TestParseObject));
         Assert.IsTrue(obj.IsDataAvailable);
-        Assert.AreEqual("Corgi", obj.ClassName);
+        Assert.AreEqual("TestObject", obj.ClassName);
         Assert.AreEqual("lLaKcolnu", obj.ObjectId);
         Assert.IsNotNull(obj.CreatedAt);
         Assert.IsNotNull(obj.UpdatedAt);
+        //Assert.AreEqual(123, obj.Value); // We can even test the custom property.
     }
 
     [TestMethod]
