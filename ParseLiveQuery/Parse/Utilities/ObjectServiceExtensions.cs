@@ -354,24 +354,26 @@ public static class ObjectServiceExtensions
         // We can't call `new T(state)` directly due to generic constraints.
         // We must use reflection to find and invoke our new internal constructor.
 
-        var constructor = typeof(T).GetConstructor(
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
-            null,
-            new[] { typeof(IObjectState), typeof(IServiceHub) },
-            null
-        );
+        //var constructor = typeof(T).GetConstructor(
+        //    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+        //    null,
+        //    new[] { typeof(IObjectState), typeof(IServiceHub) },
+        //    null
+        //);
 
-        if (constructor == null)
-        {
-            // Fallback for subclasses that might not have this constructor.
-            // This preserves old behavior but our main path is the new one.
-            T obj = classController.Instantiate(className, serviceHub) as T;
-            obj.HandleFetchResult(state);
-            return obj;
-        }
+        //if (constructor == null)
+        //{
+        //    // Fallback for subclasses that might not have this constructor.
+        //    // This preserves old behavior but our main path is the new one.
+        T obj = classController.Instantiate(className, serviceHub) as T;
+        obj.HandleFetchResult(state);
 
-        // This is the new, correct path.
-        return (T)constructor.Invoke(new object[] { state, serviceHub });
+        Debug.WriteLine(typeof(T));
+        return obj;
+        //}
+
+        //// This is the new, correct path.
+        //return (T)constructor.Invoke(new object[] { state, serviceHub });
     }
     internal static IDictionary<string, object> GenerateJSONObjectForSaving(
     this IServiceHub serviceHub, IDictionary<string, IParseFieldOperation> operations)

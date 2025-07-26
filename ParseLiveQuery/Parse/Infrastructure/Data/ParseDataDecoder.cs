@@ -54,6 +54,10 @@ public class ParseDataDecoder : IParseDataDecoder
                     _ => throw new NotSupportedException($"Unsupported Parse type '{type}' encountered")
                 },
 
+
+                IDictionary<string, object> { } dictionary when dictionary.ContainsKey("className") =>
+          ClassController.GenerateObjectFromState<ParseObject>(ParseObjectCoder.Instance.Decode(dictionary, this, this.Services), dictionary["className"] as string, this.Services),
+
                 IDictionary<string, object> { } dictionary => dictionary.ToDictionary(pair => pair.Key, pair => Decode(pair.Value)),
                 IList<object> { } list => list.Select(item => Decode(item)).ToList(),
                 _ => data

@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net5.0;net6.0;net7.0;net8.0;net9.0;</TargetFrameworks>
+    <TargetFrameworks>net6.0;net7.0;net8.0;net9.0;</TargetFrameworks>
     <AssemblyName>YBParseLiveQuery</AssemblyName>
     <RootNamespace>YB.Parse.LiveQuery</RootNamespace>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -40,5 +40,10 @@
     <PackageIcon>paaarse.png</PackageIcon>
     <PackageReadmeFile>ReleaseNotes.md</PackageReadmeFile>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Parse.Tests" />
+
+    <InternalsVisibleTo Include="Parse.LiveQuery.Tests" />
+  </ItemGroup>
 
 </Project>

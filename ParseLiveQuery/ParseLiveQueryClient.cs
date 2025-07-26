@@ -29,8 +29,6 @@ public class ParseLiveQueryClient :IDisposable
 
     private IWebSocketClient _webSocketClient;
     private int _requestIdCount = 1;
-    private bool _userInitiatedDisconnect;
-    private bool _hasReceivedConnected;
 
     private readonly ConcurrentDictionary<string, Subscription> _namedSubscriptions = new();
     public IReadOnlyDictionary<string, Subscription> NamedSubscriptions => _namedSubscriptions;
@@ -44,17 +42,14 @@ public class ParseLiveQueryClient :IDisposable
     private readonly Subject<LiveQueryException> _errorSubject = new();
     private readonly Subject<(int requestId, Subscription subscription)> _subscribedSubject = new();
     private readonly Subject<(int requestId, Subscription subscription)> _unsubscribedSubject = new();
-    private readonly Subject<(Subscription.Event evt, ParseObject objectData, Subscription subscription)> _objectEventSubject = new();
 
-    
 
-    private readonly Subject<LiveQueryConnectionState> _connectionStateSubject = new();
+    private readonly Subject<LiveQueryConnectionState> _connectionStateSubject = new Subject<LiveQueryConnectionState>(); 
     public IObservable<LiveQueryConnectionState> OnConnectionStateChanged => _connectionStateSubject.AsObservable();
     public IObservable<ParseLiveQueryClient> OnConnected => _connectedSubject.AsObservable();
     public IObservable<LiveQueryException> OnError => _errorSubject.AsObservable();
     public IObservable<(int requestId, Subscription subscription)> OnSubscribed => _subscribedSubject.AsObservable();
     public IObservable<(int requestId, Subscription subscription)> OnUnsubscribed => _unsubscribedSubject.AsObservable();
-    public IObservable<(Subscription.Event evt, ParseObject objectData, Subscription subscription)> OnObjectEvent => _objectEventSubject.AsObservable();
 
 
 
@@ -78,12 +73,18 @@ public class ParseLiveQueryClient :IDisposable
         _taskQueue = taskQueue;
     }
 
-    
+
+    private readonly object _stateLock = new();
     private readonly LiveQueryConnectionState _connectionState = LiveQueryConnectionState.Disconnected;
     public LiveQueryConnectionState ConnectionState
     {
-        get => _connectionState;
-        
+        get
+        {
+            lock (_stateLock)
+            {
+                return _connectionState;
+            }
+        }
     }
 
 
@@ -136,46 +137,37 @@ public class ParseLiveQueryClient :IDisposable
         
         _subscriptions.TryAdd(requestId, subscription);
 
-        
-        if (!IsConnected)
-        {
-            await ConnectIfNeededAsync();
-        }
-        else if (_userInitiatedDisconnect)
-        {
-            throw new InvalidOperationException("The client was explicitly disconnected and must be reconnected before subscribing");
-        }
-        
+        Start();
+
+      
         await SendSubscriptionAsync(subscription);
 
         return subscription;
     }
 
 
-    public async Task ConnectIfNeededAsync()
+    public void ConnectIfNeeded()
     {
-        switch (GetWebSocketState())
+        lock (_stateLock)
         {
-            case WebSocketClientState.None:
-            case WebSocketClientState.Disconnecting:
-            case WebSocketClientState.Disconnected:
-                await ReconnectAsync();
-                break;
-            case WebSocketClientState.Connecting:
-            case WebSocketClientState.Connected:
-                _hasReceivedConnected=true;
-                break;
-            default:
-                break;
+            if (ConnectionState == LiveQueryConnectionState.Disconnected || ConnectionState == LiveQueryConnectionState.Failed)
+            {
+               _=  ReconnectAsync();
+                return;
+            }
+            return ;
         }
     }
-    private void OnWebSocketClosed(WebSocketCloseStatus? status, string? description)
+    private void OnWebSocketClosed(WebSocketCloseStatus? status, string description)
     {
-        var info = new DisconnectInfo(this, _userInitiatedDisconnect, status, description);
+        var userInitiated = (ConnectionState == LiveQueryConnectionState.Disconnected); 
+        var info = new DisconnectInfo(this, userInitiated, status, description);
         _disconnectedSubject.OnNext(info);
 
-        if (_clientState == ClientState.Started && !_userInitiatedDisconnect)
+        
+        if (!userInitiated)
         {
+            SetConnectionState(LiveQueryConnectionState.Reconnecting);
             _ = ReconnectAsync();
         }
     }
@@ -245,13 +237,13 @@ public class ParseLiveQueryClient :IDisposable
         {
             await _webSocketClient?.CloseAsync();
         }
-        _userInitiatedDisconnect = false;
-        _hasReceivedConnected = false;
+        
+        
         _webSocketClient = _webSocketClientFactory(_hostUri, new WebSocketClientCallback(this), 8094); 
         await _webSocketClient.OpenAsync();
         if (_webSocketClient.State == WebSocketState.Open)
         {
-            _hasReceivedConnected=true;
+            
         }
     }
 
@@ -261,8 +253,8 @@ public class ParseLiveQueryClient :IDisposable
         await _webSocketClient?.CloseAsync();
         _webSocketClient = null;
 
-        _userInitiatedDisconnect = true;
-        _hasReceivedConnected = false;
+        
+        
     }
 
 
@@ -278,7 +270,7 @@ public class ParseLiveQueryClient :IDisposable
             };
     }
 
-    public bool IsConnected { get => _hasReceivedConnected; }
+    
 
     private Task SendSubscriptionAsync(Subscription subscription)
     {
@@ -309,7 +301,7 @@ public class ParseLiveQueryClient :IDisposable
     private Task SendOperationAsync(IClientOperation operation)
     {  
         // If we are connected, send immediately.
-        if (IsConnected && _webSocketClient?.State == WebSocketState.Open)
+        if ( _webSocketClient?.State == WebSocketState.Open)
         {
             return _taskQueue.Enqueue(async () => await _webSocketClient.SendAsync(operation.ToJson()));
         }
@@ -373,6 +365,7 @@ public class ParseLiveQueryClient :IDisposable
 
     private async Task ParseMessage(string message)
     {
+        Debug.WriteLine($"CLIENT: ParseMessage starting for: {message}");
         try
         {
             var jsonElementDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message);
@@ -388,45 +381,49 @@ public class ParseLiveQueryClient :IDisposable
             {
                 throw new LiveQueryException.InvalidResponseException("'op' field is null or empty.");
             }
-
+            Debug.WriteLine($"CLIENT: Parsed operation: {rawOperation}");
             switch (rawOperation)
             {
                 case "connected":
-                    _hasReceivedConnected = true;
-                    _connectedSubject.OnNext(this);
+                    await _taskQueue.Enqueue(() =>
+                    {
+                        SetConnectionState(LiveQueryConnectionState.Connected);
+                        _connectedSubject.OnNext(this);
+                    });
                     foreach (Subscription subscription in _subscriptions.Values)
                     {
-                       await SendSubscriptionAsync(subscription);
+                        await SendSubscriptionAsync(subscription);
                     }
-
                     await ProcessOperationQueueAsync();
                     break;
-                case "redirect":
-                    
-                    break;
                 case "subscribed":
-                    HandleSubscribedEvent(jsonObject);
+                    await _taskQueue.Enqueue(() => HandleSubscribedEvent(jsonObject));
                     break;
                 case "unsubscribed":
-                    HandleUnsubscribedEvent(jsonObject);
+                    await _taskQueue.Enqueue(() => HandleUnsubscribedEvent(jsonObject));
                     break;
                 case "enter":
-                    HandleObjectEvent(Subscription.Event.Enter, jsonObject);
+                    await _taskQueue.Enqueue(() => HandleObjectEvent(Subscription.Event.Enter, jsonObject));
                     break;
                 case "leave":
-                    HandleObjectEvent(Subscription.Event.Leave, jsonObject);
+                    await _taskQueue.Enqueue(()=> HandleObjectEvent(Subscription.Event.Leave, jsonObject));
                     break;
                 case "update":
-                    HandleObjectEvent(Subscription.Event.Update, jsonObject);
+                    Debug.WriteLine("CLIENT: Detected 'update' operation. Calling HandleObjectEvent...");
+                    await _taskQueue.Enqueue(()=> HandleObjectEvent(Subscription.Event.Update, jsonObject));
                     break;
                 case "create":
-                    HandleObjectEvent(Subscription.Event.Create, jsonObject);
+                    await _taskQueue.Enqueue(()=> HandleObjectEvent(Subscription.Event.Create, jsonObject));
                     break;
                 case "delete":
-                    HandleObjectEvent(Subscription.Event.Delete, jsonObject);
+                    await _taskQueue.Enqueue(()=> HandleObjectEvent(Subscription.Event.Delete, jsonObject));
                     break;
                 case "error":
-                    HandleErrorEvent(jsonObject);
+                    await _taskQueue.Enqueue(() => HandleErrorEvent(jsonObject));
+                    if (!jsonObject.ContainsKey("requestId"))
+                    {
+                        SetConnectionState(LiveQueryConnectionState.Failed);
+                    }
                     break;
                 default:
                     throw new LiveQueryException.InvalidResponseException($"Unexpected operation: {rawOperation}");
@@ -444,16 +441,26 @@ public class ParseLiveQueryClient :IDisposable
         try
         {
             int requestId = Convert.ToInt32(jsonObject["requestId"]);
-            var jsonElement = (JsonElement)jsonObject["object"];
-            var objectData = JsonElementToDictionary(jsonElement);
+            Debug.WriteLine($"CLIENT: HandleObjectEvent for requestId {requestId}");
+
 
             if (_subscriptions.TryGetValue(requestId, out var subscription))
             {
-                var obj = ParseClient.Instance.Decoder.Decode(objectData, ParseClient.Instance.Services) as ParseObject;
+                Debug.WriteLine($"CLIENT: Found subscription for requestId {requestId}.");
 
-                _objectEventSubject.OnNext((subscriptionEvent, obj, subscription));
+                var jsonElement = (JsonElement)jsonObject["object"];
+                var objectData = JsonElementToDictionary(jsonElement);
+
+
+                var obj = ParseClient.Instance.Decoder.Decode(objectData);
+             
+
+                if (obj != null)
+                {
+                    // Directly route the event to the correct subscription.
+                    subscription.DidReceive(subscription.QueryObj, subscriptionEvent, obj as ParseObject);
+                }
             }
-
         }
         catch (Exception ex)
         {
@@ -560,8 +567,10 @@ public class ParseLiveQueryClient :IDisposable
         }
     }
 
-    private void OnWebSocketError(Exception exception) => _errorSubject.OnNext(new LiveQueryException.UnknownException("Socket error", exception));
-
+    private void OnWebSocketError(Exception exception)
+    {
+        _taskQueue.Enqueue(() => _errorSubject.OnNext(new LiveQueryException.UnknownException("Socket error", exception)));
+    }
     public void Dispose()
     {
         _= Task.Run(async () => await Dispose(true));
@@ -586,12 +595,14 @@ public class ParseLiveQueryClient :IDisposable
             _errorSubject.Dispose();
             _subscribedSubject.Dispose();
             _unsubscribedSubject.Dispose();
-            _objectEventSubject.Dispose();
 
-            
+            if(_webSocketClient is not null)
+            {
+
             
             await _webSocketClient?.CloseAsync();
 
+            }
             _subscriptions.Clear();
             _namedSubscriptions.Clear();
         }
@@ -608,7 +619,7 @@ public class ParseLiveQueryClient :IDisposable
             throw new ObjectDisposedException(nameof(ParseLiveQueryClient));
         }
     }
-    sealed class WebSocketClientCallback : IWebSocketClientCallback
+    internal class WebSocketClientCallback : IWebSocketClientCallback
     {
         private readonly ParseLiveQueryClient _client;
         public WebSocketClientCallback(ParseLiveQueryClient client)
@@ -620,13 +631,14 @@ public class ParseLiveQueryClient :IDisposable
         {
             try
             {
-                _client._hasReceivedConnected = false;
+                
                 await _client.SendOperationWithSessionAsync(session =>
                     new ConnectClientOperation(_client._applicationId, _client._clientKey, session))
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
+                _client.SetConnectionState(LiveQueryConnectionState.Failed);
                 var exception = ex is AggregateException ae ? ae.Flatten() : ex;
                 _client._errorSubject.OnNext(
                     exception is LiveQueryException lqex ? lqex :
@@ -650,16 +662,16 @@ public class ParseLiveQueryClient :IDisposable
             }
         }
 
-        public void OnClose(WebSocketCloseStatus? status, string? description)
+        public void OnClose(WebSocketCloseStatus? status, string description)
         {
-            _client._hasReceivedConnected = false;
+            
             _client.OnWebSocketClosed(status, description);
         }
         // --- ADD this new private method to ParseLiveQueryClient ---
         
         public void OnError(Exception exception)
         {
-            _client._hasReceivedConnected = false;
+            
             _client.OnWebSocketError(exception);
         }
         public void OnStateChanged()
@@ -668,7 +680,19 @@ public class ParseLiveQueryClient :IDisposable
         }
 
     }
-    sealed class SubscriptionFactory : ISubscriptionFactory
+
+
+    private void SetConnectionState(LiveQueryConnectionState state)
+    {
+        lock (_stateLock)
+        {
+            if (_connectionState == state)
+                return;
+            _connectionStateSubject.OnNext(state);
+        }
+    }
+
+    internal class SubscriptionFactory : ISubscriptionFactory
     {
         public Subscription<T> CreateSubscription<T>(int requestId, ParseQuery<T> query, Action<Subscription> unsubscribeAction) where T : ParseObject
         {
@@ -686,8 +710,8 @@ public class ParseLiveQueryClient :IDisposable
             return;
 
         _clientState = ClientState.Started;
-        _userInitiatedDisconnect = false; // Reset disconnect flag
-        _ = ConnectIfNeededAsync(); // Start the connection loop
+        
+        ConnectIfNeeded(); // Start the connection loop
     }
     /// <summary>
     /// Explicitly stops the client, disconnects, and disables auto-reconnection.
@@ -699,7 +723,7 @@ public class ParseLiveQueryClient :IDisposable
             return;
 
         _clientState = ClientState.Stopped;
-        _userInitiatedDisconnect = true; // This is a user-initiated stop
+        
         _operationQueue.Clear(); // Clear any pending operations
         await DisconnectAsync();
     }
@@ -711,14 +735,14 @@ public record DisconnectInfo(
     ParseLiveQueryClient Client,
     bool UserInitiated,
     WebSocketCloseStatus? CloseStatus,
-    string? Reason
+    string Reason
 );
 public interface IWebSocketClientCallback
 {
     Task OnOpen();
     Task OnMessage(string message);
     //void OnClose();
-    void OnClose(WebSocketCloseStatus? status, string? description);
+    void OnClose(WebSocketCloseStatus? status, string description);
     void OnError(Exception exception);
     void OnStateChanged();
 }
