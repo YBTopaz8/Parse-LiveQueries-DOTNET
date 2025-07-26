@@ -47,22 +47,39 @@ public class ParseRelationOperation : IParseFieldOperation
             _ => throw new InvalidOperationException("Operation is invalid after previous operation.")
         };
     }
-
     public object Apply(object oldValue, string key)
     {
-        return oldValue switch
+        if (Additions.Count == 0 && Removals.Count == 0)
         {
-            _ when Additions.Count == 0 && Removals.Count == 0 => default,
-            null => ClassController.CreateRelation(null, key, TargetClassName),
-            ParseRelationBase { TargetClassName: { } oldClassname } when oldClassname != TargetClassName => throw new InvalidOperationException($"Related object must be a {oldClassname}, but a {TargetClassName} was passed in."),
-            ParseRelationBase { } oldRelation => (Relation: oldRelation, oldRelation.TargetClassName = TargetClassName).Relation,
-            _ => throw new InvalidOperationException("Operation is invalid after previous operation.")
-        };
+            return default;
+        }
+
+        if (oldValue == null)
+        {
+
+            var val = ClassController.CreateRelation(null, key, TargetClassName);
+            Value = val;
+            return val;
+        }
+
+        if (oldValue is ParseRelationBase oldRelation)
+        {
+            if (oldRelation.TargetClassName != null && oldRelation.TargetClassName != TargetClassName)
+            {
+                throw new InvalidOperationException($"Related object must be a {oldRelation.TargetClassName}, but a {TargetClassName} was passed in.");
+            }
+            Value = oldRelation;
+            oldRelation.TargetClassName = TargetClassName;
+            return oldRelation;
+        }
+
+        throw new InvalidOperationException("Operation is invalid after previous operation.");
     }
+
+    public object Value { get; private set; }
 
     public string TargetClassName { get; }
 
-    public object Value => Additions.ToList();
 
     IEnumerable<string> GetIdsFromObjects(IEnumerable<ParseObject> objects)
     {
@@ -82,8 +99,9 @@ public class ParseRelationOperation : IParseFieldOperation
         return objects.Select(entity => entity.ObjectId).Distinct();
     }
 
-    public object ConvertToJSON(IServiceHub serviceHub = null)
+    public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = null)
     {
+
         List<object> additions = Additions.Select(id => PointerOrLocalIdEncoder.Instance.Encode(ClassController.CreateObjectWithoutData(TargetClassName, id, serviceHub), serviceHub)).ToList(), removals = Removals.Select(id => PointerOrLocalIdEncoder.Instance.Encode(ClassController.CreateObjectWithoutData(TargetClassName, id, serviceHub), serviceHub)).ToList();
 
         Dictionary<string, object> addition = additions.Count == 0 ? default : new Dictionary<string, object>

@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+
 using Parse.Abstractions.Infrastructure;
-using Parse.Infrastructure.Utilities;
 using Parse.Infrastructure;
+using Parse.Infrastructure.Data;
+using Parse.Infrastructure.Utilities;
 
 #if DEBUG
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Parse.Tests")]
@@ -65,53 +67,25 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
     /// <param name="configurators">A set of <see cref="IServiceHubMutator"/> implementation instances to tweak the behaviour of the SDK.</param>
     public ParseClient(IServerConnectionData configuration, IServiceHub serviceHub = default, params IServiceHubMutator[] configurators)
     {
-        if (serviceHub is { })
-        {
-            Services = new OrchestrationServiceHub { Custom = serviceHub, Default = new ServiceHub { ServerConnectionData = GenerateServerConnectionData() } };
-        }
-        else
-        {
-            Services = new ServiceHub { ServerConnectionData = GenerateServerConnectionData() } as IServiceHub;
-        }
+        Services = serviceHub is { } ? new OrchestrationServiceHub { Custom = serviceHub, Default = new ServiceHub { ServerConnectionData = GenerateServerConnectionData() } } : new ServiceHub { ServerConnectionData = GenerateServerConnectionData() } as IServiceHub;
 
-        IServerConnectionData GenerateServerConnectionData()
+        IServerConnectionData GenerateServerConnectionData() => configuration switch
         {
-            if (configuration == null)
-                throw new ArgumentNullException(nameof(configuration));
-
-            var data = configuration as IServerConnectionData;
-            if (string.IsNullOrEmpty(data.Key))
+            null => throw new ArgumentNullException(nameof(configuration)),
+            ServerConnectionData { Test: true, ServerURI: { } } data => data,
+            ServerConnectionData { Test: true } data => new ServerConnectionData
             {
-                data.Key=data.MasterKey;
-            }
-            if (data != null && data.Test && !string.IsNullOrEmpty(data.ServerURI))
-            {
-                return data;
-            }
-            else if (data != null && data.Test)
-            {
-                return new ServerConnectionData
-                {
-                    ApplicationID = data.ApplicationID,
-                    Headers = data.Headers,
-                    MasterKey = data.MasterKey,
-                    Test = data.Test,
-                    Key = data.Key,
-                    ServerURI = data.ServerURI,
-                };
-            }
-            else if (!string.IsNullOrEmpty(configuration.ApplicationID)
-                  && !string.IsNullOrEmpty(configuration.ServerURI)
-                  && !string.IsNullOrEmpty(configuration.Key))
-            {
-                return configuration;
-            }
-            else
-            {
-                throw new InvalidOperationException("The IServerConnectionData implementation instance provided to the ParseClient constructor must be populated with the information needed to connect to a Parse server instance.");
-            }
-        }
-
+                ApplicationID = data.ApplicationID,
+                Headers = data.Headers,
+                MasterKey = data.MasterKey,
+                Test = data.Test,
+                Key = data.Key,
+                ServerURI = "https://api.parse.com/1/"
+            },
+            { ServerURI: "https://api.parse.com/1/" } => throw new InvalidOperationException("Since the official parse server has shut down, you must specify a URI that points to a hosted instance."),
+            { ApplicationID: { }, ServerURI: { }, Key: { } } data => data,
+            _ => throw new InvalidOperationException("The IServerConnectionData implementation instance provided to the ParseClient constructor must be populated with the information needed to connect to a Parse server instance.")
+        };
 
         if (configurators is { Length: int length } && length > 0)
         {
@@ -120,6 +94,28 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
                 IMutableServiceHub { } mutableServiceHub => BuildHub((Hub: mutableServiceHub, mutableServiceHub.ServerConnectionData = serviceHub.ServerConnectionData ?? Services.ServerConnectionData).Hub, Services, configurators),
                 { } => BuildHub(default, Services, configurators)
             };
+        }
+
+
+        FinalizeDecoder(Services);
+        void FinalizeDecoder(IServiceHub hubToFinalize)
+        {
+            if (hubToFinalize is OrchestrationServiceHub orchestrationHub)
+            {
+                FinalizeDecoder(orchestrationHub.Default);
+                FinalizeDecoder(orchestrationHub.Custom);
+                return;
+            }
+
+            if (hubToFinalize is ServiceHub hub && hub.Decoder == null)
+            {
+                hub.Decoder = new ParseDataDecoder(hub);
+            }
+       
+            else if (hubToFinalize is MutableServiceHub mutableHub && mutableHub.Decoder == null)
+            {
+                mutableHub.Decoder = new ParseDataDecoder(mutableHub);
+            }
         }
 
         Services.ClassController.AddIntrinsic();

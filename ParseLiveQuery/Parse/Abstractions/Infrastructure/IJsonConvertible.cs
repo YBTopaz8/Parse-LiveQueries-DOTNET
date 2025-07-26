@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Parse.Abstractions.Infrastructure;
 
 /// <summary>
@@ -9,5 +11,5 @@ public interface IJsonConvertible
     /// Converts the object to a data structure that can be converted to JSON.
     /// </summary>
     /// <returns>An object to be JSONified.</returns>
-    object ConvertToJSON(IServiceHub serviceHub = default);
+    IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub=default);
 }

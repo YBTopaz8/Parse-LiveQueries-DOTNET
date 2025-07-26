@@ -28,8 +28,4 @@ public interface IServerConnectionData
     /// Additional HTTP headers to be sent with network requests from the SDK.
     /// </summary>
     IDictionary<string, string> Headers { get; set; }
-
-    // TODO: Move Test property elsewhere.
-
-    internal bool Test { get; set; }
 }

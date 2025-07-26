@@ -10,6 +10,7 @@ using Parse.Infrastructure.Utilities;
 using Parse.Infrastructure.Data;
 using Parse.Infrastructure.Execution;
 using Parse.Infrastructure;
+using System.Diagnostics;
 
 namespace Parse.Platform.Cloud;
 
@@ -33,7 +34,7 @@ public class ParseCloudCodeController : IParseCloudCodeController
         {
             // Prepare the command
             var command = new ParseCommand(
-                $"functions/{Uri.EscapeDataString(name)}",
+                $"functions/{Uri.EscapeUriString(name)}",
                 method: "POST",
                 sessionToken: sessionToken,
                 data: NoObjectsEncoder.Instance.Encode(parameters, serviceHub) as IDictionary<string, object>);
@@ -52,7 +53,7 @@ public class ParseCloudCodeController : IParseCloudCodeController
             }
 
             // Decode the result
-            var decoded = Decoder.Decode(commandResult.Item2, serviceHub) as IDictionary<string, object>;
+            var decoded = Decoder.Decode(commandResult.Item2) as IDictionary<string, object>;
 
             // Extract the result key
             if (decoded.TryGetValue("result", out var result))

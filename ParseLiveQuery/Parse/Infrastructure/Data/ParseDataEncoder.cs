@@ -1,8 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.ExceptionServices;
+
 using Parse.Abstractions.Infrastructure;
+using Parse.Abstractions.Infrastructure.Control;
+using Parse.Abstractions.Platform.Objects;
+using Parse.Infrastructure.Control;
 using Parse.Infrastructure.Utilities;
 
 namespace Parse.Infrastructure.Data;
@@ -14,6 +20,11 @@ namespace Parse.Infrastructure.Data;
 /// <seealso cref="ParseDataDecoder"/>
 public abstract class ParseDataEncoder
 {
+    private IServiceHub Services { get; }
+    private IParseObjectClassController ClassController => Services.ClassController;
+
+
+
     private static readonly string[] SupportedDateFormats = ParseClient.DateFormatStrings;
 
     public static bool Validate(object value)
@@ -46,9 +57,10 @@ public abstract class ParseDataEncoder
     {
         if (value == null)
             return null;
-
         return value switch
         {
+            // Primitive types or strings
+            _ when value.GetType().IsPrimitive || value is string => value,
             // DateTime encoding
             DateTime date => EncodeDate(date),
 
@@ -59,25 +71,17 @@ public abstract class ParseDataEncoder
             ParseObject entity => EncodeObject(entity),
 
             // JSON-convertible types
+            ParseSetOperation setOperation => setOperation.ConvertValueToJSON(serviceHub),
             IJsonConvertible jsonConvertible => jsonConvertible.ConvertToJSON(serviceHub),
 
             // Dictionary encoding
             IDictionary<string, object> dictionary => EncodeDictionary(dictionary, serviceHub),
-            IDictionary<string, string> dictionary => EncodeDictionary(dictionary, serviceHub),
-            IDictionary<string, int> dictionary => EncodeDictionary(dictionary, serviceHub),
-            IDictionary<string, long> dictionary => EncodeDictionary(dictionary, serviceHub),
-            IDictionary<string, float> dictionary => EncodeDictionary(dictionary, serviceHub),
-            IDictionary<string, double> dictionary => EncodeDictionary(dictionary, serviceHub),
-
+            IDictionary<string, IDictionary<string, object>> dictionary => EncodeDictionaryStringDict(dictionary, serviceHub),
             // List or array encoding
             IEnumerable<object> list => EncodeList(list, serviceHub),
             Array array => EncodeList(array.Cast<object>(), serviceHub),
 
-            // Parse field operations
 
-
-            // Primitive types or strings
-            _ when value.GetType().IsPrimitive || value is string => value,
 
             // Unsupported types
             _ => throw new ArgumentException($"Unsupported type for encoding: {value?.GetType()?.FullName}")
@@ -97,7 +101,7 @@ public abstract class ParseDataEncoder
     {
         return new Dictionary<string, object>
         {
-            
+
             ["iso"] = date.ToString(SupportedDateFormats.First(), CultureInfo.InvariantCulture),
             ["__type"] = "Date"
         };
@@ -142,56 +146,26 @@ public abstract class ParseDataEncoder
 
         return encodedDictionary;
     }
-
-    // Add a specialized method to handle string-only dictionaries
-    private object EncodeDictionary(IDictionary<string, string> dictionary, IServiceHub serviceHub)
-    {
-
-        return dictionary.ToDictionary(
-            pair => pair.Key,
-            pair => Encode(pair.Value, serviceHub) // Encode string values as object
-        );
-    }
-
-    // Add a specialized method to handle int-only dictionaries
-    private object EncodeDictionary(IDictionary<string, int> dictionary, IServiceHub serviceHub)
-    {
-        return dictionary.ToDictionary(
-            pair => pair.Key,
-            pair => Encode(pair.Value, serviceHub) // Encode int values as object
-        );
-    }
-
-    // Add a specialized method to handle long-only dictionaries
-    private object EncodeDictionary(IDictionary<string, long> dictionary, IServiceHub serviceHub)
-    {
-        return dictionary.ToDictionary(
-            pair => pair.Key,
-            pair => Encode(pair.Value, serviceHub) // Encode long values as object
-        );
-    }
-
-    // Add a specialized method to handle float-only dictionaries
-    private object EncodeDictionary(IDictionary<string, float> dictionary, IServiceHub serviceHub)
-    {
-
-
-        return dictionary.ToDictionary(
-            pair => pair.Key,
-            pair => Encode(pair.Value, serviceHub) // Encode float values as object
-        );
-    }
-
+  
     // Add a specialized method to handle double-only dictionaries
-    private object EncodeDictionary(IDictionary<string, double> dictionary, IServiceHub serviceHub)
+    private object EncodeDictionaryStringDict(IDictionary<string, IDictionary<string, object>> dictionary, IServiceHub serviceHub)
     {
-
-
         return dictionary.ToDictionary(
-            pair => pair.Key,
-            pair => Encode(pair.Value, serviceHub) // Encode double values as object
-        );
+        pair => pair.Key,
+        pair =>
+        {
+            // If the value is another dictionary, recursively process it
+            if (pair.Value is IDictionary<string, object> nestedDict)
+            {
+                return EncodeDictionary(nestedDict, serviceHub);
+            }
+
+            // Return the actual value as-is
+            return pair.Value;
+        });
+
     }
+
 
 
     /// <summary>

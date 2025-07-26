@@ -45,7 +45,7 @@ public class ServiceHub : IServiceHub
     public ICacheController CacheController => LateInitializer.GetValue(() => new CacheController { });
     public IParseObjectClassController ClassController => LateInitializer.GetValue(() => new ParseObjectClassController { });
 
-    public IParseDataDecoder Decoder => LateInitializer.GetValue(() => new ParseDataDecoder(ClassController));
+    public IParseDataDecoder Decoder { get; internal set; }
 
     public IParseInstallationController InstallationController => LateInitializer.GetValue(() => new ParseInstallationController(CacheController));
     public IParseCommandRunner CommandRunner => LateInitializer.GetValue(() => new ParseCommandRunner(WebClient, InstallationController, MetadataController, ServerConnectionData, new Lazy<IParseUserController>(() => UserController)));

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Parse.Abstractions.Infrastructure;
 using Parse.Abstractions.Infrastructure.Control;
 using Parse.Abstractions.Infrastructure.Data;
@@ -7,10 +8,6 @@ using Parse.Abstractions.Platform.Objects;
 using Parse.Platform.Objects;
 
 namespace Parse.Infrastructure.Data;
-
-// TODO: (richardross) refactor entire parse coder interfaces.
-// Done: (YB) though, I wonder why Encode is never used in the ParseObjectCoder class. Might update if I find a use case.
-//Got it now. The Encode method is used in ParseObjectController.cs
 
 
 /// <summary>
@@ -90,7 +87,7 @@ public class ParseObjectCoder
             if (pair.Key == "__type" || pair.Key == "className")
                 continue;
 
-            serverData[pair.Key] = decoder.Decode(pair.Value, serviceHub);
+            serverData[pair.Key] = decoder.Decode(pair.Value);
         }
 
         // Populate server data with primary properties
@@ -107,8 +104,7 @@ public class ParseObjectCoder
             CreatedAt = createdAt,
             UpdatedAt = updatedAt,
             ServerData = serverData,
-            SessionToken = sessionToken,
-            
+            SessionToken = sessionToken
         };
     }
 

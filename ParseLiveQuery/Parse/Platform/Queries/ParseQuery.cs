@@ -202,10 +202,7 @@ public class ParseQuery<T> where T : ParseObject
     /// all <see cref="ParseObject"/>s of the provided class.
     /// </summary>
     /// <param name="className">The name of the class to retrieve ParseObjects for.</param>
-    public ParseQuery(IServiceHub serviceHub, string className)
-    {
-        (ClassName, Services) = (className ?? throw new ArgumentNullException(nameof(className), "Must specify a ParseObject class name when creating a ParseQuery."), serviceHub);
-    }
+    public ParseQuery(IServiceHub serviceHub, string className) => (ClassName, Services) = (className ?? throw new ArgumentNullException(nameof(className), "Must specify a ParseObject class name when creating a ParseQuery."), serviceHub);
 
     #region Order By
 
@@ -398,26 +395,6 @@ public class ParseQuery<T> where T : ParseObject
     public ParseQuery<T> WhereEqualTo(string key, object value)
     {
         return new ParseQuery<T>(this, where: new Dictionary<string, object> { { key, value } });
-    }
-    /// <summary>
-    /// Constrains an array field so that its length equals <paramref name="size"/>.
-    /// </summary>
-    /// <param name="key">The array field to check.</param>
-    /// <param name="size">The exact length the array must have (>= 0).</param>
-    /// <returns>A new query with the $size constraint.</returns>
-    public ParseQuery<T> WhereSizeEqualTo(string key, int size)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            throw new ArgumentException("Key must not be null or empty.", nameof(key));
-        if (size < 0)
-            throw new ArgumentOutOfRangeException(nameof(size), "Size must be non-negative.");
-
-        // Build { key: { "$size": size } }
-        var clause = new Dictionary<string, object>
-        {
-            [key] = new Dictionary<string, object> { ["$size"] = size }
-        };
-        return new ParseQuery<T>(this, where: clause);
     }
 
     /// <summary>
@@ -716,24 +693,14 @@ public class ParseQuery<T> where T : ParseObject
         });
     }
 
-    public ParseQuery<T> WhereRelatedTo(ParseObject parent, string key)
+    internal ParseQuery<T> WhereRelatedTo(ParseObject parent, string key)
     {
-        if (parent == null)
-        {
-            throw new ArgumentNullException(nameof(parent));
-        }
-
-        if (string.IsNullOrEmpty(key))
-        {
-            throw new ArgumentException("Key cannot be null or empty.", nameof(key));
-        }
-
         return new ParseQuery<T>(this, where: new Dictionary<string, object>
         {
             ["$relatedTo"] = new Dictionary<string, object>
             {
                 ["object"] = parent,
-                ["key"] = key
+                [nameof(key)] = key
             }
         });
     }
@@ -843,6 +810,31 @@ public class ParseQuery<T> where T : ParseObject
         return GetAsync(objectId, CancellationToken.None);
     }
 
+    public static ParseQuery<T> Or(params ParseQuery<T>[] queries)
+    {
+        if (queries.Length == 0)
+        {
+            throw new ArgumentException("You must provide at least one query to Or.");
+        }
+
+        string className = queries[0].ClassName;
+        var serviceHub = queries[0].Services;
+
+        if (queries.Any(q => q.ClassName != className))
+        {
+            throw new ArgumentException("All queries in an Or query must be for the same class.");
+        }
+
+        var orClause = new Dictionary<string, object>
+        {
+            ["$or"] = queries.Select(q => q.Filters).ToList()
+        };
+
+        var resultQuery = new ParseQuery<T>(serviceHub, className);
+        return new ParseQuery<T>(resultQuery, where: orClause);
+    }
+
+
     /// <summary>
     /// Constructs a ParseObject whose id is already known by fetching data
     /// from the server.
@@ -941,7 +933,11 @@ public class ParseQuery<T> where T : ParseObject
     /// <returns>A hash code for the current object.</returns>
     public override int GetHashCode()
     {
-        // TODO (richardross): Implement this.
-        return 0;
+        int hash = ClassName.GetHashCode();
+        hash = (hash * 31) + (Filters?.GetHashCode() ?? 0);
+        hash = (hash * 31) + (Orderings?.GetHashCode() ?? 0);
+        hash = (hash * 31) + (SkipAmount?.GetHashCode() ?? 0);
+        hash = (hash * 31) + (LimitAmount?.GetHashCode() ?? 0);
+        return hash;
     }
 }

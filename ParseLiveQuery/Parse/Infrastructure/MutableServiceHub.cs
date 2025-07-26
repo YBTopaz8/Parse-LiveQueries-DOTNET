@@ -79,8 +79,7 @@ public class MutableServiceHub : IMutableServiceHub
         WebClient ??= new UniversalWebClient { };
         CacheController ??= new CacheController { };
         ClassController ??= new ParseObjectClassController { };
-
-        Decoder ??= new ParseDataDecoder(ClassController);
+        Decoder ??= new ParseDataDecoder(this);
 
         InstallationController ??= new ParseInstallationController(CacheController);
         CommandRunner ??= new ParseCommandRunner(WebClient, InstallationController, MetadataController, ServerConnectionData, new Lazy<IParseUserController>(() => UserController));

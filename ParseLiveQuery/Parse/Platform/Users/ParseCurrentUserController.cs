@@ -10,6 +10,7 @@ using Parse.Abstractions.Platform.Users;
 using Parse.Infrastructure.Utilities;
 using Parse.Infrastructure.Data;
 using System;
+using System.Diagnostics;
 
 namespace Parse.Platform.Users;
 
@@ -91,7 +92,7 @@ public class ParseCurrentUserController : IParseCurrentUserController
         if (CurrentUser is { ObjectId: { } })
             return CurrentUser;
 
-        var usr = await TaskQueue.Enqueue<Task<ParseUser>>(async _ =>
+        var usr = await TaskQueue.Enqueue<Task<ParseUser?>>(async _ =>
         {
             var storage = await StorageController.LoadAsync().ConfigureAwait(false);
             if (storage.TryGetValue(nameof(CurrentUser), out var serializedData) && serializedData is string serialization)

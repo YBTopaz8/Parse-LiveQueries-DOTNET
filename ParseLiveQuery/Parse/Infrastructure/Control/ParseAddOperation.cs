@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using Parse.Abstractions.Infrastructure;
 using Parse.Abstractions.Infrastructure.Control;
+using Parse.Infrastructure.Data;
 using Parse.Infrastructure.Utilities;
 
 namespace Parse.Infrastructure.Control;
@@ -48,7 +49,7 @@ public class ParseAddOperation : IParseFieldOperation
         return result;
     }
 
-    public object ConvertToJSON(IServiceHub serviceHub = default)
+    public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = default)
     {
         // Convert the data into JSON-compatible structures
         var encodedObjects = Data.Select(EncodeForParse).ToList();

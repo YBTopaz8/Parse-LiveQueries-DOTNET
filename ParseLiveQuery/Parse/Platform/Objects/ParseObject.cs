@@ -132,7 +132,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         catch (Exception ex)
         {
 
-            throw new Exception("Error when Creating parse Object.."+ex.Message);
+            throw new Exception("Error when Creating parse Object..");
         }
     }
 
@@ -638,9 +638,9 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// Saves this object to the server.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
-    public async Task SaveAsync(CancellationToken cancellationToken = default)
+    public Task SaveAsync(CancellationToken cancellationToken = default)
     {
-        await TaskQueue.Enqueue(toAwait => SaveAsync(toAwait, cancellationToken), cancellationToken);        
+        return TaskQueue.Enqueue(toAwait => SaveAsync(toAwait, cancellationToken), cancellationToken);
     }
 
     /// <summary>

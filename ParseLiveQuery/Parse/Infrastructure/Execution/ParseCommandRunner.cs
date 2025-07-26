@@ -4,6 +4,7 @@ using System.Net;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+
 using Parse.Abstractions.Infrastructure;
 using Parse.Abstractions.Infrastructure.Execution;
 using Parse.Abstractions.Platform.Installations;
@@ -63,7 +64,9 @@ public class ParseCommandRunner : IParseCommandRunner
         var preparedCommand = await PrepareCommand(command).ConfigureAwait(false);
 
         // Execute the command
-        var response = await GetWebClient().ExecuteAsync(preparedCommand, uploadProgress, downloadProgress, cancellationToken).ConfigureAwait(false);
+        var response = await GetWebClient()
+            .ExecuteAsync(preparedCommand, uploadProgress, downloadProgress, cancellationToken)
+            .ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -76,11 +79,11 @@ public class ParseCommandRunner : IParseCommandRunner
 
         if (responseCode <= 100 && responseCode <200)
         {
-            
+
         }
         if (responseCode == 200)
         {
-            
+
         }
         else if (responseCode == 201)
         {
@@ -100,11 +103,11 @@ public class ParseCommandRunner : IParseCommandRunner
                     "Bad Request: unable to parse error payload");
             }
 
-            ParseFailureException.ErrorCode code = (ParseFailureException.ErrorCode)payload.code;
-           
-         
+            ParseFailureException.ErrorCode code = (ParseFailureException.ErrorCode) payload.code;
+
+
             throw new ParseFailureException(code: code, payload.error);
-            
+
         }
         else if (responseCode == 401)
         {
@@ -233,7 +236,6 @@ public class ParseCommandRunner : IParseCommandRunner
 
         return newCommand;
 
-        //by the way, The original installationFetchTask variable was removed, as the async/await pattern eliminates the need for it.
     }
 
 }

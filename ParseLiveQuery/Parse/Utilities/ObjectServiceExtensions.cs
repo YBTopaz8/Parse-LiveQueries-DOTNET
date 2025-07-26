@@ -372,19 +372,17 @@ public static class ObjectServiceExtensions
         return obj;
     }
 
-    internal static IDictionary<string, object> GenerateJSONObjectForSaving(this IServiceHub serviceHub, IDictionary<string, IParseFieldOperation> operations)
+    internal static IDictionary<string, object> GenerateJSONObjectForSaving(
+    this IServiceHub serviceHub, IDictionary<string, IParseFieldOperation> operations)
     {
         Dictionary<string, object> result = new Dictionary<string, object>();
 
         foreach (KeyValuePair<string, IParseFieldOperation> pair in operations)
         {
-            if (pair.Value != null)
-            {
-                var objectToEncode = pair.Value;
-                result[pair.Key] = PointerOrLocalIdEncoder.Instance.Encode(objectToEncode, serviceHub);
-            }
+            var s = PointerOrLocalIdEncoder.Instance.Encode(pair.Value, serviceHub);
+            
+            result[pair.Key] = s;
         }
-
 
         return result;
     }
