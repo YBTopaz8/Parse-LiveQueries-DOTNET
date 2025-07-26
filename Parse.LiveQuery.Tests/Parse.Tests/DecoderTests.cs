@@ -230,7 +230,7 @@ public class DecoderTests
         IDictionary<string, object> value = new Dictionary<string, object>()
         {
             ["__type"] = "Object",
-            ["className"] = "TestObject", // Match the ParseClassName attribute
+            ["className"] = "TestParseObject", // Match the ParseClassName attribute
             ["objectId"] = "lLaKcolnu",
             ["createdAt"] = "2015-06-22T21:23:41.733Z",
             ["updatedAt"] = "2015-06-22T22:06:41.733Z",
@@ -239,17 +239,18 @@ public class DecoderTests
 
         // ACT
         // We now expect the decoder to produce a strongly-typed TestParseObject.
-        var obj = Client.Decoder.Decode(value) as ParseObject;
+        var objs = Client.Decoder.Decode(value) ;
+        var obj = objs as TestParseObject;
 
         // ASSERT
         Assert.IsNotNull(obj);
-        //Assert.IsInstanceOfType(obj, typeof(TestParseObject));
+        Assert.IsInstanceOfType(obj, typeof(TestParseObject));
         Assert.IsTrue(obj.IsDataAvailable);
-        Assert.AreEqual("TestObject", obj.ClassName);
+        Assert.AreEqual("TestParseObject", obj.ClassName);
         Assert.AreEqual("lLaKcolnu", obj.ObjectId);
         Assert.IsNotNull(obj.CreatedAt);
         Assert.IsNotNull(obj.UpdatedAt);
-        //Assert.AreEqual(123, obj.Value); // We can even test the custom property.
+        Assert.AreEqual(123, obj.Value); // We can even test the custom property.
     }
 
     [TestMethod]
