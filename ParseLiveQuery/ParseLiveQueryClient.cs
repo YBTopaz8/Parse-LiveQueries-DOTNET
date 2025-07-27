@@ -328,7 +328,7 @@ public class ParseLiveQueryClient :IDisposable
             }
             catch (Exception ex)
             {
-            Debug.WriteLine($"Error sending queued operation: {ex.Message}");
+            
                 // Depending on desired robustness, you could re-queue the failed operation.
             }
         }
@@ -365,7 +365,7 @@ public class ParseLiveQueryClient :IDisposable
 
     private async Task ParseMessage(string message)
     {
-        Debug.WriteLine($"CLIENT: ParseMessage starting for: {message}");
+        
         try
         {
             var jsonElementDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message);
@@ -381,7 +381,7 @@ public class ParseLiveQueryClient :IDisposable
             {
                 throw new LiveQueryException.InvalidResponseException("'op' field is null or empty.");
             }
-            Debug.WriteLine($"CLIENT: Parsed operation: {rawOperation}");
+            
             switch (rawOperation)
             {
                 case "connected":
@@ -409,7 +409,7 @@ public class ParseLiveQueryClient :IDisposable
                     await _taskQueue.Enqueue(()=> HandleObjectEvent(Subscription.Event.Leave, jsonObject));
                     break;
                 case "update":
-                    Debug.WriteLine("CLIENT: Detected 'update' operation. Calling HandleObjectEvent...");
+                    
                     await _taskQueue.Enqueue(()=> HandleObjectEvent(Subscription.Event.Update, jsonObject));
                     break;
                 case "create":
@@ -441,12 +441,12 @@ public class ParseLiveQueryClient :IDisposable
         try
         {
             int requestId = Convert.ToInt32(jsonObject["requestId"]);
-            Debug.WriteLine($"CLIENT: HandleObjectEvent for requestId {requestId}");
+            
 
 
             if (_subscriptions.TryGetValue(requestId, out var subscription))
             {
-                Debug.WriteLine($"CLIENT: Found subscription for requestId {requestId}.");
+                
 
                 var jsonElement = (JsonElement)jsonObject["object"];
                 var objectData = JsonElementToDictionary(jsonElement);
@@ -464,7 +464,7 @@ public class ParseLiveQueryClient :IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error in HandleObjectEvent: {ex.Message}");
+            
             _errorSubject.OnNext(new LiveQueryException.UnknownException("Error handling object event", ex));
         }
     }
