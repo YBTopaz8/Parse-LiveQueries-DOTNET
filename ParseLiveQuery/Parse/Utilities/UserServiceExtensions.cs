@@ -119,7 +119,7 @@ public static class UserServiceExtensions
     /// This is preferable to use <see cref="LogOut()"/>, unless your code is already running from a
     /// background thread.
     /// </summary>
-    public static async Task LogOutAsync(this IServiceHub serviceHub, CancellationToken cancellationToken)
+    public static async Task LogOutAsync(this IServiceHub serviceHub, CancellationToken cancellationToken=default)
     {
         // Fetch the current user
         var user = await GetCurrentUserAsync(serviceHub, cancellationToken).ConfigureAwait(false);
