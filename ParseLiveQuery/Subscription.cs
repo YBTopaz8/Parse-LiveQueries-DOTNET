@@ -102,7 +102,7 @@ public class Subscription<T> : Subscription where T : ParseObject
 
     internal override void DidReceive(object queryObj, Event objEvent, ParseObject obj)
     {
-        Debug.WriteLine($"SUBSCRIPTION: DidReceive called for event '{objEvent}' on object '{obj.ObjectId}'."); // CHECKPOINT 9
+        
 
         var typedObj = (T)obj;
         var query = (ParseQuery<T>)queryObj;
@@ -114,10 +114,8 @@ public class Subscription<T> : Subscription where T : ParseObject
                 OnCreate?.Invoke(typedObj);
                 break;
             case Event.Update:
-                Debug.WriteLine("SUBSCRIPTION: Firing OnUpdate event handler. 10"); // CHECKPOINT 10
                 OnUpdate?.Invoke(typedObj, null);
 
-                Debug.WriteLine("SUBSCRIPTION: Firing OnUpdate event handler. 11"); // CHECKPOINT 11
                 break; // Passing null for original for now
             case Event.Delete:
                 OnDelete?.Invoke(typedObj);
@@ -453,7 +451,7 @@ public static class SubscriptionExtensions
     {
         if (evt == Subscription.Event.Update)
         {
-            Debug.WriteLine("EXTENSION: Attaching OnUpdate handler."); // CHECKPOINT 11
+            
             subscription.OnUpdate += handler;
         }
     }

@@ -65,7 +65,7 @@ public class LiveQuerySocialScenariosTests
     [TestCleanup]
     public void TearDown()
     {
-        clientA?.Dispose();
+        _=(clientA?.DisposeAsync());
     }
 
     [TestMethod]
@@ -79,14 +79,14 @@ public class LiveQuerySocialScenariosTests
         // 1. User A subscribes to incoming friend requests.
         var friendRequestQuery = new ParseQuery<ParseObject>(serviceHub, "FriendRequest").WhereEqualTo("recipient", userA);
         ParseObject receivedRequest = null;
-        var requestSubscription = await clientA.SubscribeAsync(friendRequestQuery);
+        var requestSubscription = clientA.Subscribe(friendRequestQuery);
         requestSubscription.On(Subscription.Event.Create, (obj, q) => receivedRequest = obj);
         await callbackA.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
 
         // 2. User A subscribes to new GroupChats they are a member of.
         var groupChatQuery = new ParseQuery<ParseObject>(serviceHub, "GroupChat").WhereEqualTo("members", userA);
         ParseObject newGroupChat = null;
-        var groupSubscription = await clientA.SubscribeAsync(groupChatQuery);
+        var groupSubscription = clientA.Subscribe(groupChatQuery);
         groupSubscription.On(Subscription.Event.Create, (obj, q) => newGroupChat = obj);
         await callbackA.OnMessage("{\"op\":\"subscribed\",\"requestId\":2}");
 
@@ -95,7 +95,7 @@ public class LiveQuerySocialScenariosTests
         var messageQuery = new ParseQuery<TestChat>(serviceHub).WhereContainedIn("parentChat", await groupChatQuery.FindAsync()); // Hypothetical query
 
         var receivedMessages = new List<TestChat>();
-        var messageSubscription = await clientA.SubscribeAsync(messageQuery);
+        var messageSubscription = clientA.Subscribe(messageQuery);
         messageSubscription.Events
             .Where(e => e.EventType == Subscription.Event.Create)
             .Select(e => e.Object)

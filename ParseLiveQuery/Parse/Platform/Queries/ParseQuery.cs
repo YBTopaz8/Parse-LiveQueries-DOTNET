@@ -154,43 +154,55 @@ public class ParseQuery<T> where T : ParseObject
         return new HashSet<string>((KeySelections ?? Enumerable.Empty<string>()).Concat(selectedKeys));
     }
 
-    IDictionary<string, object> MergeWhereClauses(IDictionary<string, object> where)
+    IDictionary<string, object> MergeWhereClauses(IDictionary<string, object> newClauses)
     {
-        if (Filters is null)
-        {
-            return where;
-        }
+        if (Filters == null)
+            return newClauses;
 
-        Dictionary<string, object> newWhere = new Dictionary<string, object>(Filters);
-        foreach (KeyValuePair<string, object> pair in where)
+        var merged = new Dictionary<string, object>(Filters);
+
+        foreach (var pair in newClauses)
         {
-            if (newWhere.ContainsKey(pair.Key))
+            if (!merged.TryGetValue(pair.Key, out var existingValue))
             {
-                if (!(newWhere[pair.Key] is IDictionary<string, object> oldCondition) || !(pair.Value is IDictionary<string, object> condition))
-                {
-                    throw new ArgumentException("More than one where clause for the given key provided.");
-                }
+                merged[pair.Key] = pair.Value;
+                continue;
+            }
 
-                Dictionary<string, object> newCondition = new Dictionary<string, object>(oldCondition);
-                foreach (KeyValuePair<string, object> conditionPair in condition)
-                {
-                    if (newCondition.ContainsKey(conditionPair.Key))
-                    {
-                        throw new ArgumentException("More than one condition for the given key provided.");
-                    }
+            // --- THIS IS THE FIX ---
+            // Instead of throwing an exception, we combine the constraints.
+            var allConstraints = new List<object>();
 
-                    newCondition[conditionPair.Key] = conditionPair.Value;
-                }
-
-                newWhere[pair.Key] = newCondition;
+            if (existingValue is IDictionary<string, object> existingDict && existingDict.TryGetValue("$all", out var allItems))
+            {
+                allConstraints.AddRange((IEnumerable<object>)allItems);
             }
             else
             {
-                newWhere[pair.Key] = pair.Value;
+                allConstraints.Add(existingValue);
             }
+
+            allConstraints.Add(pair.Value);
+
+            merged[pair.Key] = new Dictionary<string, object> { { "$all", allConstraints } };
         }
-        return newWhere;
+        return merged;
     }
+    /// <summary>
+    /// Adds a constraint to the query that requires a particular key's array or relation
+    /// field to have a specific number of elements.
+    /// </summary>
+    /// <param name="key">The key to check.</param>
+    /// <param name="size">The exact number of elements the array or relation must have.</param>
+    /// <returns>A new query with the additional constraint.</returns>
+    public ParseQuery<T> WhereSizeEqualTo(string key, int size)
+    {
+        return new ParseQuery<T>(this, where: new Dictionary<string, object>
+        {
+            { key, new Dictionary<string, object> { { "$size", size } } }
+        });
+    }
+
 
     /// <summary>
     /// Constructs a query based upon the ParseObject subclass used as the generic parameter for the ParseQuery.
@@ -337,6 +349,7 @@ public class ParseQuery<T> where T : ParseObject
     {
         return new ParseQuery<T>(this, where: new Dictionary<string, object> { { key, new Dictionary<string, object> { { "$all", values.ToList() } } } });
     }
+  
 
     /// <summary>
     /// Adds a constraint for finding string values that contain a provided string.
@@ -693,7 +706,7 @@ public class ParseQuery<T> where T : ParseObject
         });
     }
 
-    internal ParseQuery<T> WhereRelatedTo(ParseObject parent, string key)
+    public ParseQuery<T> WhereRelatedTo(ParseObject parent, string key)
     {
         return new ParseQuery<T>(this, where: new Dictionary<string, object>
         {

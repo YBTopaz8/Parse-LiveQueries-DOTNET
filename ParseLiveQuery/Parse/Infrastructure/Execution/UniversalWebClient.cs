@@ -80,52 +80,37 @@ public class UniversalWebClient : IWebClient
         HttpResponseMessage response = await Client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         uploadProgress.Report(new DataTransferLevel { Amount = 1 });
 
-        Stream responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
 
+        long? totalLength = response.Content.Headers.ContentLength;
 
+        await using Stream responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using var resultStream = new MemoryStream();
 
-        MemoryStream resultStream = new MemoryStream { };
-        int bufferSize = 4096, bytesRead = 0;
+        int bufferSize = 4096;
         byte[] buffer = new byte[bufferSize];
-        long totalLength = -1, readSoFar = 0;
+        int bytesRead;
+        long readSoFar = 0;
 
-        try
-        {
-            totalLength = responseStream.Length;
-        }
-        catch
-        {
-            Console.WriteLine("Unsupported length...");
-        };
-
-
+        
         while ((bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
             await resultStream.WriteAsync(buffer, 0, bytesRead, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
             readSoFar += bytesRead;
 
-            if (totalLength > -1)
+            
+            if (totalLength.HasValue && totalLength.Value > 0)
             {
-                downloadProgress.Report(new DataTransferLevel { Amount = (double) readSoFar / totalLength });
+                downloadProgress.Report(new DataTransferLevel { Amount = (double)readSoFar / totalLength.Value });
             }
         }
 
-        responseStream.Dispose(); 
-                                  
-        if (totalLength == -1)
-        {
-            downloadProgress.Report(new DataTransferLevel { Amount = 1.0 });
-        }
+        
+        downloadProgress.Report(new DataTransferLevel { Amount = 1.0 });
 
         byte[] resultAsArray = resultStream.ToArray();
-        resultStream.Dispose();
-
-        // Assume UTF-8 encoding.
         string resultString = Encoding.UTF8.GetString(resultAsArray, 0, resultAsArray.Length);
-        
+
         return new Tuple<HttpStatusCode, string>(response.StatusCode, resultString);
     }
 

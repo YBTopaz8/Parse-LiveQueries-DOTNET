@@ -34,7 +34,6 @@ public class LiveQueryIntegrationScenariosTests
 
         // Register all subclasses that will be used in the tests.
         parseClient.AddValidClass<TestChat>();
-        parseClient.AddValidClass<ParseUser>(); // For friend requests
 
         parseClient.Publicize();
         serviceHub = parseClient.Services;
@@ -53,7 +52,7 @@ public class LiveQueryIntegrationScenariosTests
     [TestCleanup]
     public void TearDown()
     {
-        client?.Dispose();
+        client?.DisposeAsync();
     }
 
     [TestMethod]
@@ -62,14 +61,15 @@ public class LiveQueryIntegrationScenariosTests
     {
         // ARRANGE
         var chatQuery = new ParseQuery<TestChat>(serviceHub);
-        TestChat receivedMessage = null;
-        var subscription = await client.SubscribeAsync(chatQuery);
+        TestChat receivedMessage = new();
+        var subscription = client.Subscribe(chatQuery);
         subscription.On(Subscription.Event.Create, (obj) => receivedMessage = obj);
         await webSocketCallback.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
 
         // ACT
         var serverMessage = "{\"op\":\"create\",\"requestId\":1,\"object\":{\"className\":\"TestChat\",\"objectId\":\"msg123\",\"Msg\":\"Hello!\"}}";
         await webSocketCallback.OnMessage(serverMessage);
+
 
         // ASSERT
         Assert.IsNotNull(receivedMessage, "A new message should have been received.");
@@ -83,8 +83,8 @@ public class LiveQueryIntegrationScenariosTests
     {
         // ARRANGE
         var chatQuery = new ParseQuery<TestChat>(serviceHub);
-        TestChat updatedMessage = null;
-        var subscription = await client.SubscribeAsync(chatQuery);
+        TestChat updatedMessage = new();
+        var subscription = client.Subscribe(chatQuery);
         subscription.On(Subscription.Event.Update, (obj, q) => updatedMessage = obj);
         await webSocketCallback.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
 
@@ -104,8 +104,8 @@ public class LiveQueryIntegrationScenariosTests
     {
         // ARRANGE
         var chatQuery = new ParseQuery<TestChat>(serviceHub);
-        TestChat deletedMessage = null;
-        var subscription = await client.SubscribeAsync(chatQuery);
+        TestChat deletedMessage = new();
+        var subscription = client.Subscribe(chatQuery);
         subscription.On(Subscription.Event.Delete, (obj) => deletedMessage = obj);
         await webSocketCallback.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
 
@@ -126,9 +126,9 @@ public class LiveQueryIntegrationScenariosTests
         var currentUser = serviceHub.CreateObjectWithoutData<ParseUser>("currentUser_id");
         var requestQuery = new ParseQuery<ParseObject>(serviceHub, "FriendRequest")
             .WhereEqualTo("recipient", currentUser);
+        ParseObject receivedRequest = serviceHub.CreateObjectWithoutData<ParseObject>("currentUser_id");
 
-        ParseObject receivedRequest = null;
-        var subscription = await client.SubscribeAsync(requestQuery);
+        var subscription = client.Subscribe(requestQuery);
         subscription.On(Subscription.Event.Create, (obj, q) => receivedRequest = obj);
         await webSocketCallback.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
 
@@ -150,9 +150,9 @@ public class LiveQueryIntegrationScenariosTests
         // ARRANGE
         var playerStateQuery = new ParseQuery<ParseObject>(serviceHub, "PlayerState")
             .WhereEqualTo("objectId", "playerState_abc");
+        ParseObject updatedState = serviceHub.CreateObjectWithoutData<ParseObject>("currentUser_id");
 
-        ParseObject updatedState = null;
-        var subscription = await client.SubscribeAsync(playerStateQuery);
+        var subscription = client.Subscribe(playerStateQuery);
         subscription.On(Subscription.Event.Update, (obj, q) => updatedState = obj);
         await webSocketCallback.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
 

@@ -365,15 +365,18 @@ public static class ObjectServiceExtensions
         //{
         //    // Fallback for subclasses that might not have this constructor.
         //    // This preserves old behavior but our main path is the new one.
-        T obj = classController.Instantiate(className, serviceHub) as T;
-        obj.HandleFetchResult(state);
+        try
+        {
+            T obj = classController.Instantiate(className, serviceHub) as T;
+            obj.HandleFetchResult(state);
 
-        Debug.WriteLine(typeof(T));
-        return obj;
-        //}
+            return obj;
+        }
+        catch (Exception ex)
+        {
 
-        //// This is the new, correct path.
-        //return (T)constructor.Invoke(new object[] { state, serviceHub });
+            throw new Exception(ex.Message,ex.InnerException);
+        }
     }
     internal static IDictionary<string, object> GenerateJSONObjectForSaving(
     this IServiceHub serviceHub, IDictionary<string, IParseFieldOperation> operations)

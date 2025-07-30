@@ -15,12 +15,19 @@ public class ParseDataDecoder : IParseDataDecoder
     private IServiceHub Services { get; }
     private IParseObjectClassController ClassController => Services.ClassController;
 
-    public ParseDataDecoder(IServiceHub serviceHub) => Services = serviceHub ?? throw new ArgumentNullException(nameof(serviceHub));
+    public ParseDataDecoder(IServiceHub serviceHub)
+    {
+        Services = serviceHub ?? throw new ArgumentNullException(nameof(serviceHub));
+    }
 
     static string[] Types { get; } = { "Date", "Bytes", "Pointer", "File", "GeoPoint", "Object", "Relation" };
 
     public object Decode(object data)
     {
+        //if (ClassController is null)
+        //{
+        //    throw new Exception("ClassController is null");
+        //}
             return data switch
             {
                 null => default,

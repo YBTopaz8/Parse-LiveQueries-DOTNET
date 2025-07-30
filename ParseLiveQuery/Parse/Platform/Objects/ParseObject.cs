@@ -14,6 +14,7 @@ using Parse.Infrastructure.Utilities;
 using Parse.Platform.Objects;
 using Parse.Infrastructure.Data;
 using System.Diagnostics;
+using Parse.Infrastructure;
 
 namespace Parse;
 
@@ -1225,11 +1226,18 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
             // Handle the cancellation case
             HandleFailedSave(currentOperations);
         }
-        catch (Exception ex)
+        
+        catch (ParseFailureException ex)
         {
             // Log or handle unexpected errors
             HandleFailedSave(currentOperations);
-            throw new Exception(ex.Message);
+            throw new ParseFailureException(ex.Code,ex.Message);
+        }
+        catch (Exception ex)
+        {
+            // Handle any other exceptions that may occur
+            HandleFailedSave(currentOperations);
+            throw new Exception("An error occurred while saving the ParseObject.", ex);
         }
     }
 

@@ -35,6 +35,10 @@ public class ParseUser : ParseObject
         }
     }
 
+    public static ParseUser CurrentUser
+    {
+        get => ParseClient.Instance.CurrentUser;
+    }
     public override void Remove(string key)
     {
         if (key == "username")
