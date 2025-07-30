@@ -53,7 +53,7 @@ public class ParseCloudCodeController : IParseCloudCodeController
             }
 
             // Decode the result
-            var decoded = Decoder.Decode(commandResult.Item2) as IDictionary<string, object>;
+            var decoded = Decoder.Decode(commandResult.Item2, serviceHub) as IDictionary<string, object>;
 
             // Extract the result key
             if (decoded.TryGetValue("result", out var result))

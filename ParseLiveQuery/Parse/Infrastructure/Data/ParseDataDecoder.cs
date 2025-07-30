@@ -12,26 +12,20 @@ namespace Parse.Infrastructure.Data;
 
 public class ParseDataDecoder : IParseDataDecoder
 {
-    private IServiceHub Services { get; }
-    private IParseObjectClassController ClassController => Services.ClassController;
 
-    public ParseDataDecoder(IServiceHub serviceHub)
-    {
-        Services = serviceHub ?? throw new ArgumentNullException(nameof(serviceHub));
-    }
+    IParseObjectClassController ClassController { get; }
+    
 
+    public ParseDataDecoder(IParseObjectClassController classController) => ClassController = classController;
     static string[] Types { get; } = { "Date", "Bytes", "Pointer", "File", "GeoPoint", "Object", "Relation" };
 
-    public object Decode(object data)
+    public object Decode(object data, IServiceHub serviceHub)
     {
-        //if (ClassController is null)
-        //{
-        //    throw new Exception("ClassController is null");
-        //}
-            return data switch
+    
+        return data switch
             {
                 null => default,
-                IDictionary<string, object> { } dictionary when dictionary.ContainsKey("__op") => ParseFieldOperations.Decode(dictionary,this, ClassController),
+                IDictionary<string, object> { } dictionary when dictionary.ContainsKey("__op") => ParseFieldOperations.Decode(dictionary,this, ClassController,serviceHub),
 
                 IDictionary<string, object> { } dictionary when dictionary.TryGetValue("__type", out var type) && Types.Contains(type) => type switch
                 {
@@ -42,7 +36,7 @@ public class ParseDataDecoder : IParseDataDecoder
                     "Pointer" => DecodePointer(
                         dictionary.TryGetValue("className", out var className) ? className as string : throw new KeyNotFoundException("Missing 'className' for Pointer type"),
                         dictionary.TryGetValue("objectId", out var objectId) ? objectId as string : throw new KeyNotFoundException("Missing 'objectId' for Pointer type"),
-                        this.Services),
+                        serviceHub),
 
                     "File" => new ParseFile(
                         dictionary.TryGetValue("name", out var name) ? name as string : throw new KeyNotFoundException("Missing 'name' for File type"),
@@ -53,27 +47,27 @@ public class ParseDataDecoder : IParseDataDecoder
                         Conversion.To<double>(dictionary.TryGetValue("longitude", out var longitude) ? longitude : throw new KeyNotFoundException("Missing 'longitude' for GeoPoint type"))),
 
                     "Object" => ClassController.GenerateObjectFromState<ParseObject>(
-                        ParseObjectCoder.Instance.Decode(dictionary, this, this.Services),
+                        ParseObjectCoder.Instance.Decode(dictionary, this, serviceHub),
                         dictionary.TryGetValue("className", out var objClassName) ? objClassName as string : throw new KeyNotFoundException("Missing 'className' for Object type"),
-                         this.Services),
+                         serviceHub),
 
-                    "Relation" => this.Services.CreateRelation(null, null, dictionary.TryGetValue("className", out var relClassName) ? relClassName as string : throw new KeyNotFoundException("Missing 'className' for Relation type")),
+                    "Relation" => serviceHub.CreateRelation(null, null, dictionary.TryGetValue("className", out var relClassName) ? relClassName as string : throw new KeyNotFoundException("Missing 'className' for Relation type")),
                     _ => throw new NotSupportedException($"Unsupported Parse type '{type}' encountered")
                 },
 
 
                 IDictionary<string, object> { } dictionary when dictionary.ContainsKey("className") =>
-          ClassController.GenerateObjectFromState<ParseObject>(ParseObjectCoder.Instance.Decode(dictionary, this, this.Services), dictionary["className"] as string, this.Services),
+          ClassController.GenerateObjectFromState<ParseObject>(ParseObjectCoder.Instance.Decode(dictionary, this, serviceHub), dictionary["className"] as string, serviceHub),
 
-                IDictionary<string, object> { } dictionary => dictionary.ToDictionary(pair => pair.Key, pair => Decode(pair.Value)),
-                IList<object> { } list => list.Select(item => Decode(item)).ToList(),
+                IDictionary<string, object> { } dictionary => dictionary.ToDictionary(pair => pair.Key, pair => Decode(pair.Value, serviceHub)),
+                IList<object> { } list => list.Select(item => Decode(item, serviceHub)).ToList(),
                 _ => data
             };
         
     }
 
     protected virtual object DecodePointer(string className, string objectId, IServiceHub  services) =>
-        ClassController.CreateObjectWithoutData(className, objectId,  this.Services);
+        ClassController.CreateObjectWithoutData(className, objectId, services);
 
     public static DateTime? ParseDate(string input)
     {

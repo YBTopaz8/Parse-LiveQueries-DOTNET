@@ -69,7 +69,7 @@ public class ObjectCoderTests
         mockState.Setup(x => x.ClassName).Returns("TestClass");
         mockState.Setup(x => x.ObjectId).Returns("testId");
 
-        mockDecoder.Setup(x => x.Decode(It.IsAny<IDictionary<string, object>>())).Returns(mockState.Object);
+        mockDecoder.Setup(x => x.Decode(It.IsAny<IDictionary<string, object>>(), It.IsAny<IServiceHub>())).Returns(mockState.Object);
         mockCommandRunner.Setup(c => c.RunCommandAsync(It.IsAny<ParseCommand>(), null, null, It.IsAny<CancellationToken>())).ReturnsAsync(new Tuple<HttpStatusCode, IDictionary<string, object>>(System.Net.HttpStatusCode.OK, new Dictionary<string, object>()));
 
         ParseObjectController controller = new ParseObjectController(mockCommandRunner.Object, mockDecoder.Object, new ServerConnectionData());

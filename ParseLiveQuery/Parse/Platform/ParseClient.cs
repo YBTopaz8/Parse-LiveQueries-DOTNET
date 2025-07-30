@@ -97,26 +97,26 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
         }
 
 
-        FinalizeDecoder(Services);
-        void FinalizeDecoder(IServiceHub hubToFinalize)
-        {
-            if (hubToFinalize is OrchestrationServiceHub orchestrationHub)
-            {
-                FinalizeDecoder(orchestrationHub.Default);
-                FinalizeDecoder(orchestrationHub.Custom);
-                return;
-            }
+        //FinalizeDecoder(Services);
+        //void FinalizeDecoder(IServiceHub hubToFinalize)
+        //{
+        //    if (hubToFinalize is OrchestrationServiceHub orchestrationHub)
+        //    {
+        //        FinalizeDecoder(orchestrationHub.Default);
+        //        FinalizeDecoder(orchestrationHub.Custom);
+        //        return;
+        //    }
 
-            if (hubToFinalize is ServiceHub hub && hub.Decoder == null)
-            {
-                hub.Decoder = new ParseDataDecoder(hub);
-            }
+        //    if (hubToFinalize is ServiceHub hub && hub.Decoder == null)
+        //    {
+        //        hub.Decoder = new ParseDataDecoder(hub);
+        //    }
        
-            else if (hubToFinalize is MutableServiceHub mutableHub && mutableHub.Decoder == null)
-            {
-                mutableHub.Decoder = new ParseDataDecoder(mutableHub);
-            }
-        }
+        //    else if (hubToFinalize is MutableServiceHub mutableHub && mutableHub.Decoder == null)
+        //    {
+        //        mutableHub.Decoder = new ParseDataDecoder(mutableHub);
+        //    }
+        //}
 
         Services.ClassController.AddIntrinsic();
     }

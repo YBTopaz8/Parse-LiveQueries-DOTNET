@@ -24,7 +24,7 @@ public class ParseConfiguration : IJsonConvertible
 
     internal static ParseConfiguration Create(IDictionary<string, object> configurationData, IParseDataDecoder decoder, IServiceHub serviceHub)
     {
-        return new ParseConfiguration(decoder.Decode(configurationData["params"]    ) as IDictionary<string, object>, serviceHub);
+        return new ParseConfiguration(decoder.Decode(configurationData["params"], serviceHub) as IDictionary<string, object>, serviceHub);
     }
 
     /// <summary>

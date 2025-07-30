@@ -47,7 +47,7 @@ public class CloudTests
 
         // Mock Decoder
         decoderMock
-            .Setup(decoder => decoder.Decode(It.IsAny<object>()))
+            .Setup(decoder => decoder.Decode(It.IsAny<object>(), It.IsAny<IServiceHub>()))
             .Returns(new Dictionary<string, object> { ["unexpectedKey"] = "unexpectedValue" });
 
         // Set up service hub
@@ -88,7 +88,7 @@ public class CloudTests
 
         // Mock the Decoder response
         decoderMock
-            .Setup(decoder => decoder.Decode(It.IsAny<object>()))
+            .Setup(decoder => decoder.Decode(It.IsAny<object>(), It.IsAny<IServiceHub>()))
             .Returns(new Dictionary<string, object> { ["unexpectedKey"] = "unexpectedValue" });
 
         // Initialize the controller

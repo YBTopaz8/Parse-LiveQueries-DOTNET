@@ -46,38 +46,8 @@ public class ServiceHub : IServiceHub
     public IParseObjectClassController ClassController => LateInitializer.GetValue(() => new ParseObjectClassController { });
 
 
-    public IParseDataDecoder Decoder
-    {
-        get
-        {
-            return LateInitializer.GetValue(() =>
-            {
-                return new ParseDataDecoder(this);
-            });
-
-
-        }
-        set
-        {
-            if (value == null)
-                throw new ArgumentNullException(nameof(value), "ObjectController cannot be null.");
-            LateInitializer.SetValue(value);
-        }
-
-    }
-    public IParseObjectController ObjectController
-    {
-        get
-        {
-            return LateInitializer.GetValue(() =>
-            {
-                return new ParseObjectController(CommandRunner, Decoder, ServerConnectionData);
-            });
-        }
-
-
-
-    }
+    public IParseDataDecoder Decoder => LateInitializer.GetValue(() => new ParseDataDecoder(ClassController));
+    public IParseObjectController ObjectController => LateInitializer.GetValue(() => new ParseObjectController(CommandRunner, Decoder, ServerConnectionData));
 
     public IParseInstallationController InstallationController => LateInitializer.GetValue(() => new ParseInstallationController(CacheController));
     public IParseCommandRunner CommandRunner => LateInitializer.GetValue(() => new ParseCommandRunner(WebClient, InstallationController, MetadataController, ServerConnectionData, new Lazy<IParseUserController>(() => UserController)));

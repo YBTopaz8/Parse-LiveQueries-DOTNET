@@ -31,7 +31,7 @@ public class DecoderTests
     [TestMethod]
     public void TestParseDate()
     {
-        DateTime dateTime = (DateTime) Client.Decoder.Decode(ParseDataDecoder.ParseDate("1990-08-30T12:03:59.000Z"));
+        DateTime dateTime = (DateTime) Client.Decoder.Decode(ParseDataDecoder.ParseDate("1990-08-30T12:03:59.000Z"), Client);
 
         Assert.AreEqual(1990, dateTime.Year);
         Assert.AreEqual(8, dateTime.Month);
@@ -45,11 +45,11 @@ public class DecoderTests
     [TestMethod]
     public void TestDecodePrimitives()
     {
-        Assert.AreEqual(1,Client.Decoder.Decode(1));
-        Assert.AreEqual(0.3, Client.Decoder.Decode(0.3));
-        Assert.AreEqual("halyosy", Client.Decoder.Decode("halyosy"));
+        Assert.AreEqual(1,Client.Decoder.Decode(1, Client));
+        Assert.AreEqual(0.3, Client.Decoder.Decode(0.3, Client));
+        Assert.AreEqual("halyosy", Client.Decoder.Decode("halyosy", Client));
 
-        Assert.IsNull(Client.Decoder.Decode(default));
+        Assert.IsNull(Client.Decoder.Decode(default, Client));
     }
 
     [TestMethod]
@@ -60,7 +60,7 @@ public class DecoderTests
         var incrementData = new Dictionary<string, object> { { "__op", "Increment" }, { "amount", 322 } };
 
         // Act: Decode the data.
-        var result = Client.Decoder.Decode(incrementData);
+        var result = Client.Decoder.Decode(incrementData, Client);
 
         // Assert: Verify that the result is a valid ParseIncrementOperation.
         Assert.IsNotNull(result, "The decoded operation should not be null.");
@@ -78,7 +78,7 @@ public class DecoderTests
         var deleteData = new Dictionary<string, object> { { "__op", "Delete" } };
 
         // Act: Decode the data.
-        var result = Client.Decoder.Decode(deleteData);
+        var result = Client.Decoder.Decode(deleteData, Client);
 
         // Assert: Verify that the result is the correct singleton instance.
         Assert.IsNotNull(result);
@@ -98,7 +98,7 @@ public class DecoderTests
     };
 
         // Act: Decode the data.
-        var result = Client.Decoder.Decode(addData) as ParseAddOperation;
+        var result = Client.Decoder.Decode(addData, Client) as ParseAddOperation;
 
         // Assert
         Assert.IsNotNull(result);
@@ -122,7 +122,7 @@ public class DecoderTests
     };
 
         // Act
-        var result = Client.Decoder.Decode(addUniqueData) as ParseAddUniqueOperation;
+        var result = Client.Decoder.Decode(addUniqueData, Client) as ParseAddUniqueOperation;
 
         // Assert
         Assert.IsNotNull(result);
@@ -144,7 +144,7 @@ public class DecoderTests
     };
 
         // Act
-        var result = Client.Decoder.Decode(removeData) as ParseRemoveOperation;
+        var result = Client.Decoder.Decode(removeData, Client) as ParseRemoveOperation;
 
         // Assert
         Assert.IsNotNull(result);
@@ -156,7 +156,7 @@ public class DecoderTests
     [TestMethod]
     public void TestDecodeDate()
     {
-        DateTime dateTime = (DateTime) Client.Decoder.Decode(new Dictionary<string, object> { { "__type", "Date" }, { "iso", "1990-08-30T12:03:59.000Z" } });
+        DateTime dateTime = (DateTime) Client.Decoder.Decode(new Dictionary<string, object> { { "__type", "Date" }, { "iso", "1990-08-30T12:03:59.000Z" } }, Client);
 
         Assert.AreEqual(1990, dateTime.Year);
         Assert.AreEqual(8, dateTime.Month);
@@ -174,7 +174,7 @@ public class DecoderTests
 
         for (int i = 0; i < 2; i++, value["iso"] = (value["iso"] as string).Substring(0, (value["iso"] as string).Length - 1) + "0Z")
         {
-            DateTime dateTime = (DateTime) Client.Decoder.Decode(value);
+            DateTime dateTime = (DateTime) Client.Decoder.Decode(value,Client);
 
             Assert.AreEqual(1990, dateTime.Year);
             Assert.AreEqual(8, dateTime.Month);
@@ -187,12 +187,12 @@ public class DecoderTests
     }
 
     [TestMethod]
-    public void TestDecodeBytes() => Assert.AreEqual("This is an encoded string", System.Text.Encoding.UTF8.GetString(Client.Decoder.Decode(new Dictionary<string, object> { { "__type", "Bytes" }, { "base64", "VGhpcyBpcyBhbiBlbmNvZGVkIHN0cmluZw==" } }) as byte[]));
+    public void TestDecodeBytes() => Assert.AreEqual("This is an encoded string", System.Text.Encoding.UTF8.GetString(Client.Decoder.Decode(new Dictionary<string, object> { { "__type", "Bytes" }, { "base64", "VGhpcyBpcyBhbiBlbmNvZGVkIHN0cmluZw==" } }, Client) as byte[]));
 
     [TestMethod]
     public void TestDecodePointer()
     {
-        ParseObject obj = Client.Decoder.Decode(new Dictionary<string, object> { ["__type"] = "Pointer", ["className"] = "Corgi", ["objectId"] = "lLaKcolnu" }) as ParseObject;
+        ParseObject obj = Client.Decoder.Decode(new Dictionary<string, object> { ["__type"] = "Pointer", ["className"] = "Corgi", ["objectId"] = "lLaKcolnu" }, Client) as ParseObject;
 
         Assert.IsFalse(obj.IsDataAvailable);
         Assert.AreEqual("Corgi", obj.ClassName);
@@ -203,25 +203,25 @@ public class DecoderTests
     public void TestDecodeFile()
     {
 
-        ParseFile file1 = Client.Decoder.Decode(new Dictionary<string, object> { ["__type"] = "File", ["name"] = "parsee.png", ["url"] = "https://user-images.githubusercontent.com/5673677/138278489-7d0cebc5-1e31-4d3c-8ffb-53efcda6f29d.png" }) as ParseFile;
+        ParseFile file1 = Client.Decoder.Decode(new Dictionary<string, object> { ["__type"] = "File", ["name"] = "parsee.png", ["url"] = "https://user-images.githubusercontent.com/5673677/138278489-7d0cebc5-1e31-4d3c-8ffb-53efcda6f29d.png" }, Client) as ParseFile;
 
         Assert.AreEqual("parsee.png", file1.Name);
         Assert.AreEqual("https://user-images.githubusercontent.com/5673677/138278489-7d0cebc5-1e31-4d3c-8ffb-53efcda6f29d.png", file1.Url.AbsoluteUri);
         Assert.IsFalse(file1.IsDirty);
 
-        Assert.ThrowsException<KeyNotFoundException>(() => Client.Decoder.Decode(new Dictionary<string, object> { ["__type"] = "File", ["name"] = "Corgi.png" }));
+        Assert.ThrowsException<KeyNotFoundException>(() => Client.Decoder.Decode(new Dictionary<string, object> { ["__type"] = "File", ["name"] = "Corgi.png" }, Client));
     }
 
     [TestMethod]
     public void TestDecodeGeoPoint()
     {
-        ParseGeoPoint point1 = (ParseGeoPoint) Client.Decoder.Decode(new Dictionary<string, object> { ["__type"] = "GeoPoint", ["latitude"] = 0.9, ["longitude"] = 0.3 });
+        ParseGeoPoint point1 = (ParseGeoPoint) Client.Decoder.Decode(new Dictionary<string, object> { ["__type"] = "GeoPoint", ["latitude"] = 0.9, ["longitude"] = 0.3 }, Client);
 
         Assert.IsNotNull(point1);
         Assert.AreEqual(0.9, point1.Latitude);
         Assert.AreEqual(0.3, point1.Longitude);
 
-        Assert.ThrowsException<KeyNotFoundException>(() => Client.Decoder.Decode(new Dictionary<string, object> { ["__type"] = "GeoPoint", ["latitude"] = 0.9 }));
+        Assert.ThrowsException<KeyNotFoundException>(() => Client.Decoder.Decode(new Dictionary<string, object> { ["__type"] = "GeoPoint", ["latitude"] = 0.9 }, Client));
     }
     [TestMethod]
     public void TestDecodeObject()
@@ -239,7 +239,7 @@ public class DecoderTests
 
         // ACT
         // We now expect the decoder to produce a strongly-typed TestParseObject.
-        var objs = Client.Decoder.Decode(value) ;
+        var objs = Client.Decoder.Decode(value,Client) ;
         var obj = objs as TestParseObject;
 
         // ASSERT
@@ -263,7 +263,7 @@ public class DecoderTests
             ["objectId"] = "lLaKcolnu"
         };
 
-        ParseRelation<ParseObject> relation = Client.Decoder.Decode(value) as ParseRelation<ParseObject>;
+        ParseRelation<ParseObject> relation = Client.Decoder.Decode(value,Client) as ParseRelation<ParseObject>;
 
         Assert.IsNotNull(relation);
         Assert.AreEqual("Corgi", relation.GetTargetClassName());
@@ -293,7 +293,7 @@ public class DecoderTests
             }
         };
 
-        IDictionary<string, object> dict = Client.Decoder.Decode(value) as IDictionary<string, object>;
+        IDictionary<string, object> dict = Client.Decoder.Decode(value, Client) as IDictionary<string, object>;
 
         Assert.AreEqual("luka", dict["megurine"]);
         Assert.IsTrue(dict["hatsune"] is ParseObject);
@@ -308,7 +308,7 @@ public class DecoderTests
             [new ParseACL { }] = "lLaKcolnu"
         };
 
-        IDictionary<object, string> randomDict = Client.Decoder.Decode(randomValue) as IDictionary<object, string>;
+        IDictionary<object, string> randomDict = Client.Decoder.Decode(randomValue, Client) as IDictionary<object, string>;
 
         Assert.AreEqual("elements", randomDict["ultimate"]);
         Assert.AreEqual(2, randomDict.Keys.Count);
@@ -337,7 +337,7 @@ public class DecoderTests
             }
         };
 
-        IList<object> list = Client.Decoder.Decode(value) as IList<object>;
+        IList<object> list = Client.Decoder.Decode(value,Client) as IList<object>;
 
         Assert.AreEqual(1, list[0]);
         Assert.IsTrue(list[1] is ParseACL);
@@ -351,7 +351,7 @@ public class DecoderTests
     [TestMethod]
     public void TestDecodeArray()
     {
-        int[] value = new int[] { 1, 2, 3, 4 }, array = Client.Decoder.Decode(value) as int[];
+        int[] value = new int[] { 1, 2, 3, 4 }, array = Client.Decoder.Decode(value,Client) as int[];
 
         Assert.AreEqual(4, array.Length);
         Assert.AreEqual(1, array[0]);

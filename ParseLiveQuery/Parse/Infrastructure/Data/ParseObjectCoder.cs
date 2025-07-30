@@ -94,7 +94,7 @@ public class ParseObjectCoder
             if (pair.Key == "__type" || pair.Key == "className")
                 continue;
 
-            serverData[pair.Key] = decoder.Decode(pair.Value);
+            serverData[pair.Key] = decoder.Decode(pair.Value,serviceHub);
         }
 
         // Populate server data with primary properties

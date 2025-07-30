@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using Parse.Abstractions.Infrastructure;
 using Parse.Abstractions.Infrastructure.Control;
 using Parse.Abstractions.Infrastructure.Data;
 using Parse.Abstractions.Platform.Objects;
@@ -44,7 +45,7 @@ static class ParseFieldOperations
     /// <param name="decoder">The decoder to be used for nested objects.</param>
     /// <returns>A concrete IParseFieldOperation.</returns>
     public static IParseFieldOperation Decode(IDictionary<string, object> json, IParseDataDecoder decoder
-        , IParseObjectClassController classController)
+        , IParseObjectClassController classController, IServiceHub serviceHub)
     {
         string opName = json["__op"] as string;
 
@@ -60,7 +61,7 @@ static class ParseFieldOperations
             case "AddUnique":
             case "Remove":
                 var objects = (json["objects"] as IEnumerable<object>)
-                    .Select(item => decoder.Decode(item)) // Recursively decode each item
+                    .Select(item => decoder.Decode(item, serviceHub)) // Recursively decode each item
                     .ToList();
                 return opName switch
                 {
@@ -73,7 +74,7 @@ static class ParseFieldOperations
             case "AddRelation":
             case "RemoveRelation":
                 var relationObjects = (json["objects"] as IEnumerable<object>)
-                    .Select(item => decoder.Decode(item) as ParseObject)
+                    .Select(item => decoder.Decode(item,serviceHub ) as ParseObject)
                     .ToList();
                 string targetClass = relationObjects.FirstOrDefault()?.ClassName;
                 var adds = opName == "AddRelation" ? relationObjects : new List<ParseObject>();
@@ -88,7 +89,7 @@ static class ParseFieldOperations
                     var opJson = op as IDictionary<string, object>;
                     string innerOpName = opJson["__op"] as string;
                     var innerObjects = (opJson["objects"] as IEnumerable<object>)
-                        .Select(item => decoder.Decode(item) as ParseObject)
+                        .Select(item => decoder.Decode(item,serviceHub) as ParseObject)
                         .ToList();
 
                     if (innerOpName == "AddRelation")
