@@ -115,6 +115,9 @@ public class MyLQListener : IParseLiveQueryClientCallbacks
 
 ## Conclusion
 This v3 version integrates LINQ and Rx.NET, enabling highly flexible and reactive real-time data flows with Parse Live Queries. Advanced filtering, buffering, throttling, and complex transformations are now possible with minimal code.
+## GitAds Sponsored
+[![Sponsored by GitAds](https://gitads.dev/v1/ad-serve?source=ybtopaz8/dimmer-maui@github)](https://gitads.dev/v1/ad-track?source=ybtopaz8/dimmer-maui@github)
+
 
 PRs are welcome!
 <!-- GitAds-Verify: HN9KSPAK4P3H3PFBAOQ494A7VRUWUAXH -->
