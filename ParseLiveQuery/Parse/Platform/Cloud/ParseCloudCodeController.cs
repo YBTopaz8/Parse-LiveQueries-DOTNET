@@ -34,7 +34,7 @@ public class ParseCloudCodeController : IParseCloudCodeController
         {
             // Prepare the command
             var command = new ParseCommand(
-                $"functions/{Uri.EscapeUriString(name)}",
+                $"functions/{Uri.EscapeDataString(name)}",
                 method: "POST",
                 sessionToken: sessionToken,
                 data: NoObjectsEncoder.Instance.Encode(parameters, serviceHub) as IDictionary<string, object>);
@@ -72,10 +72,10 @@ public class ParseCloudCodeController : IParseCloudCodeController
             // Handle missing result key
             throw new ParseFailureException(ParseFailureException.ErrorCode.OtherCause, "Cloud function did not return a result.");
         }
-        catch (ParseFailureException)
+        catch (ParseFailureException ex)
         {
             // Rethrow known Parse exceptions
-            throw;
+            throw new ParseFailureException(ex.Code,ex.Message,ex);
         }
     }
 
