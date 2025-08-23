@@ -59,8 +59,8 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
     public ParseLiveQueryClient() : this(GetDefaultUri()) { }
     public ParseLiveQueryClient(ParseClient client) : this(GetDefaultUri()) 
-    { 
-    //ParseClientInstance
+    {
+        ParseClientInstance=client;
     }
     public ParseLiveQueryClient(Uri hostUri) : this(hostUri, WebSocketClient.Factory) { }
     public ParseLiveQueryClient(WebSocketClientFactory webSocketClientFactory) : this(GetDefaultUri(), webSocketClientFactory) { }
