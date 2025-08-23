@@ -91,7 +91,7 @@ public static class UserServiceExtensions
         var user = serviceHub.GenerateObjectFromState<ParseUser>(userState, "_User");
 
         // Save the user locally
-        await SaveAndReturnCurrentUserAsync(serviceHub, user).ConfigureAwait(false);
+        await SaveAndReturnCurrentUserAsync(serviceHub, user, cancellationToken ).ConfigureAwait(false);
 
         // Set the authenticated user as the current instance only after successful save
         InstanceUser = user;

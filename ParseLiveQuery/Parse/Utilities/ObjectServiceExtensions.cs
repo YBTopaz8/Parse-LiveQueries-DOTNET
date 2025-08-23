@@ -407,7 +407,12 @@ public static class ObjectServiceExtensions
     {
         foreach (ParseObject target in TraverseObjectDeep(serviceHub, node).OfType<ParseObject>())
         {
-            ICollection<ParseObject> scopedSeenNew;
+            bool isHollowPointer = target.ObjectId != null && !target.IsDataAvailable && !target.IsDirty;
+            if (isHollowPointer)
+            {
+                continue;
+            }
+                ICollection<ParseObject> scopedSeenNew;
 
             // Check for cycles of new objects. Any such cycle means it will be impossible to save
             // this collection of objects, so throw an exception.
@@ -431,7 +436,7 @@ public static class ObjectServiceExtensions
 
             if (seen.Contains(target))
             {
-                return;
+                continue;
             }
 
             seen.Add(target);

@@ -475,6 +475,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
                 var objectData = JsonElementToDictionary(jsonElement);
 
 
+
                 var obj = ParseClient.Instance.Decoder.Decode(objectData, ParseClientInstance);
 
 
