@@ -487,6 +487,10 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <param name="key">The key to check for</param>
     public bool ContainsKey(string key)
     {
+        if (key is null)
+        {
+            return false;
+        }
         lock (Mutex)
         {
             return EstimatedData.ContainsKey(key);

@@ -681,7 +681,11 @@ public static class ObjectServiceExtensions
     {
         if (serviceHub == null)
         {
-            return null;
+            serviceHub = ParseClient.Instance;
+            if (serviceHub == null)
+            {
+                return null;
+            }
         }
 
         if (string.IsNullOrEmpty(className))
