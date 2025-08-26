@@ -294,15 +294,16 @@ public class ParseLiveQueryClient :IAsyncDisposable
     }
 
 
+
     private Task SendOperationWithSessionAsync(Func<string, IClientOperation> operationFunc)
     {
         return _taskQueue.EnqueueOnSuccess(
             ParseClient.Instance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClient.Instance.Services, CancellationToken.None),
        currentSessionTokenTask =>
-            {
-                var sessionToken = currentSessionTokenTask?.Result; 
-                return SendOperationAsync(operationFunc(sessionToken));
-            });
+       {
+           var sessionToken = currentSessionTokenTask?.Result;
+           return SendOperationAsync(operationFunc(sessionToken));
+       });
     }
 
     private Task SendOperationAsync(IClientOperation operation)
@@ -776,6 +777,7 @@ public interface IWebSocketClientCallback
 }
 public enum LiveQueryConnectionState
 {
+    Stopped,
     Disconnected,
     Connecting,
     Connected,

@@ -18,7 +18,7 @@ using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
 
-using static YB.Parse.LiveQuery.EventHandler;
+using static Parse.LiveQuery.ParseEventHandler;
 
 
 namespace Parse.LiveQuery;

@@ -6,9 +6,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace YB.Parse.LiveQuery;
+namespace Parse.LiveQuery;
 
-public static class EventHandler
+public static class ParseEventHandler
 {
 
     public delegate void LiveQueryUpdateHandler<T>(T obj, T original) where T : ParseObject;
