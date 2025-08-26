@@ -170,7 +170,7 @@ public static class PushServiceExtensions
     #region Push Subscription
 
     /// <summary>
-    /// SubscribeAsync the current installation to this channel. This is shorthand for:
+    /// Subscribe the current installation to this channel. This is shorthand for:
     ///
     /// <code>
     /// var installation = ParseInstallation.CurrentInstallation;
@@ -186,7 +186,7 @@ public static class PushServiceExtensions
     }
 
     /// <summary>
-    /// SubscribeAsync the current installation to these channels. This is shorthand for:
+    /// Subscribe the current installation to these channels. This is shorthand for:
     ///
     /// <code>
     /// var installation = ParseInstallation.CurrentInstallation;

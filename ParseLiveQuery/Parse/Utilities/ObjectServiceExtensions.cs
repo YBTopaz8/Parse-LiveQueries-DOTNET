@@ -344,47 +344,51 @@ public static class ObjectServiceExtensions
      string defaultClassName,
      IServiceHub serviceHub) where T : ParseObject
     {
+
         if (state == null)
-        {
-            throw new ArgumentNullException(nameof(state), "The state cannot be null.");
-        }
+            throw new ArgumentNullException(nameof(state));
 
-        // Ensure the class name is determined or throw an exception
+        // Get the class name, but we won't use it for the constructor.
         string className = state.ClassName ?? defaultClassName;
-        if (string.IsNullOrEmpty(className))
+
+        // We can't call `new T(state)` directly due to generic constraints.
+        // We must use reflection to find and invoke our new internal constructor.
+
+        //var constructor = typeof(T).GetConstructor(
+        //    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+        //    null,
+        //    new[] { typeof(IObjectState), typeof(IServiceHub) },
+        //    null
+        //);
+
+        //if (constructor == null)
+        //{
+        //    // Fallback for subclasses that might not have this constructor.
+        //    // This preserves old behavior but our main path is the new one.
+        try
+        {
+            T obj = classController.Instantiate(className, serviceHub) as T;
+            obj.HandleFetchResult(state);
+
+            return obj;
+        }
+        catch (Exception ex)
         {
 
-            throw new InvalidOperationException("Both state.ClassName and defaultClassName are null or empty. Unable to determine class name.");
+            throw new Exception(ex.Message,ex.InnerException);
         }
-
-        // Create the object using the class controller
-        T obj = classController.Instantiate(className, serviceHub) as T;
-
-        if (obj == null)
-        {
-
-            throw new InvalidOperationException($"Failed to instantiate object of type {typeof(T).Name} for class {className}.");
-        }
-
-        // Apply the state to the object
-        obj.HandleFetchResult(state);
-
-        return obj;
     }
-
-    internal static IDictionary<string, object> GenerateJSONObjectForSaving(this IServiceHub serviceHub, IDictionary<string, IParseFieldOperation> operations)
+    internal static IDictionary<string, object> GenerateJSONObjectForSaving(
+    this IServiceHub serviceHub, IDictionary<string, IParseFieldOperation> operations)
     {
         Dictionary<string, object> result = new Dictionary<string, object>();
 
         foreach (KeyValuePair<string, IParseFieldOperation> pair in operations)
         {
-            if (pair.Value != null)
-            {
-                var objectToEncode = pair.Value;
-                result[pair.Key] = PointerOrLocalIdEncoder.Instance.Encode(objectToEncode, serviceHub);
-            }
+            var s = PointerOrLocalIdEncoder.Instance.Encode(pair.Value, serviceHub);
+            
+            result[pair.Key] = s;
         }
-
 
         return result;
     }
@@ -403,7 +407,12 @@ public static class ObjectServiceExtensions
     {
         foreach (ParseObject target in TraverseObjectDeep(serviceHub, node).OfType<ParseObject>())
         {
-            ICollection<ParseObject> scopedSeenNew;
+            bool isHollowPointer = target.ObjectId != null && !target.IsDataAvailable && !target.IsDirty;
+            if (isHollowPointer)
+            {
+                continue;
+            }
+                ICollection<ParseObject> scopedSeenNew;
 
             // Check for cycles of new objects. Any such cycle means it will be impossible to save
             // this collection of objects, so throw an exception.
@@ -427,7 +436,7 @@ public static class ObjectServiceExtensions
 
             if (seen.Contains(target))
             {
-                return;
+                continue;
             }
 
             seen.Add(target);
@@ -672,7 +681,11 @@ public static class ObjectServiceExtensions
     {
         if (serviceHub == null)
         {
-            return null;
+            serviceHub = ParseClient.Instance;
+            if (serviceHub == null)
+            {
+                return null;
+            }
         }
 
         if (string.IsNullOrEmpty(className))

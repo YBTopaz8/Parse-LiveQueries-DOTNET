@@ -9,12 +9,16 @@
 // </Summary>
 
 
+using Parse.Abstractions.Platform.Objects;
+
 using System;
+using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using System.Threading.Tasks;
 using System.Threading;
-using Parse.Abstractions.Platform.Objects;
+using System.Threading.Tasks;
+
+using static Parse.LiveQuery.ParseEventHandler;
 
 
 namespace Parse.LiveQuery;
@@ -26,11 +30,19 @@ namespace Parse.LiveQuery;
 /// <typeparam name="T">The type of ParseObject this subscription is for.</typeparam>
 public class Subscription<T> : Subscription where T : ParseObject
 {
+
+    private readonly Subject<(T created, ParseQuery<T> query)> _createSubject = new();
+    private readonly Subject<(T updated, ParseQuery<T> query)> _updateSubject = new();
+    private readonly Subject<(T deleted, ParseQuery<T> query)> _deleteSubject = new();
+    private readonly Subject<(T enter, ParseQuery<T> query)> _enterSubject = new();
+    private readonly Subject<(T leave, ParseQuery<T> query)> _leaveSubject = new();
+
     // Reactive Subjects for event streams.  Subjects are both observers and observables.
-    private readonly Subject<SubscriptionEvent<T>> _eventStream = new();
-    private readonly Subject<LiveQueryException> _errorStream = new();
-    private readonly Subject<ParseQuery<T>> _subscribeStream = new();
-    private readonly Subject<ParseQuery<T>> _unsubscribeStream = new();
+    private readonly ReplaySubject<SubscriptionEvent<T>> _eventStream = new(1);
+    private readonly ReplaySubject<LiveQueryException> _errorStream = new(1);
+    private readonly ReplaySubject<ParseQuery<T>> _subscribeStream = new(1);
+    private readonly ReplaySubject<ParseQuery<T>> _unsubscribeStream = new(1);
+
 
 
     /// <summary>
@@ -43,6 +55,12 @@ public class Subscription<T> : Subscription where T : ParseObject
     {
         RequestID = requestId;
         QueryObj = query;
+
+        this.Events.Where(e => e.EventType == Event.Create).Subscribe(e => _createSubject.OnNext((e.Object, e.Query)));
+        this.Events.Where(e => e.EventType == Event.Update).Subscribe(e => _updateSubject.OnNext((e.Object, e.Query))); 
+        this.Events.Where(e => e.EventType == Event.Delete).Subscribe(e => _deleteSubject.OnNext((e.Object, e.Query)));
+        this.Events.Where(e => e.EventType == Event.Enter).Subscribe(e => _enterSubject.OnNext((e.Object, e.Query)));
+        this.Events.Where(e => e.EventType == Event.Leave).Subscribe(e => _leaveSubject.OnNext((e.Object, e.Query)));
     }
 
     // Observable streams for LINQ usage.  These provide a fluent interface for working with events.
@@ -68,22 +86,50 @@ public class Subscription<T> : Subscription where T : ParseObject
     /// </summary>
     internal override string Name { get; set; }
 
+    internal event LiveQueryGeneralHandler<T> OnCreate;
+    internal event LiveQueryUpdateHandler<T> OnUpdate; 
+    internal event LiveQueryGeneralHandler<T> OnDelete;
+    internal event LiveQueryGeneralHandler<T> OnEnter;
+    internal event LiveQueryGeneralHandler<T> OnLeave;
 
     /// <summary>
     /// Handles an incoming event from the Live Query server.
     /// </summary>
     /// <param name="queryObj">The query object associated with the event.</param>
     /// <param name="objEvent">The type of event (Create, Update, etc.).</param>
-    /// <param name="objState">The state of the ParseObject involved in the event.</param>
+    /// <param name="parseObject">The state of the ParseObject involved in the event.</param>
 
-    internal override void DidReceive(object queryObj, Event objEvent, IObjectState objState)
+
+    internal override void DidReceive(object queryObj, Event objEvent, ParseObject obj)
     {
-        var query = (ParseQuery<T>)queryObj;
-        var obj = ParseClient.Instance.CreateObjectWithoutData<T>(objState.ClassName ?? typeof(T).Name);
-        obj.HandleFetchResult(objState);
+        
 
-        // Publish to the events stream
-        _eventStream.OnNext(new SubscriptionEvent<T>(query, objEvent, obj));
+        var typedObj = (T)obj;
+        var query = (ParseQuery<T>)queryObj;
+
+        // Fire the specific event handler directly.
+        switch (objEvent)
+        {
+            case Event.Create:
+                OnCreate?.Invoke(typedObj);
+                break;
+            case Event.Update:
+                OnUpdate?.Invoke(typedObj, null);
+
+                break; // Passing null for original for now
+            case Event.Delete:
+                OnDelete?.Invoke(typedObj);
+                break;
+            case Event.Enter:
+                OnEnter?.Invoke(typedObj);
+                break;
+            case Event.Leave:
+                OnLeave?.Invoke(typedObj);
+                break;
+        }
+
+        // Also push to the observable stream for advanced users.
+        _eventStream.OnNext(new SubscriptionEvent<T>(query, objEvent, typedObj));
     }
     /// <summary>
     /// Handles an error encountered by the Live Query subscription.
@@ -149,6 +195,22 @@ public class Subscription<T> : Subscription where T : ParseObject
 
 
     }
+
+
+    /// <summary>
+    /// Attaches a handler for a specific LiveQuery event type.
+    /// </summary>
+    /// <param name="evt">The event type to handle.</param>
+    /// <param name="handler">The handler for the event.</param>
+    /// <returns>An IDisposable that can be used to unsubscribe from the event.</returns>
+    public IDisposable On(Event evt, Action<T, ParseQuery<T>> handler)
+    {
+        return this.Events
+            .Where(e => e.EventType == evt)
+            .Subscribe(e => handler(e.Object, e.Query));
+    }
+
+
 }
 
 /// <summary>
@@ -224,7 +286,7 @@ public abstract class Subscription : IDisposable
     /// <param name="queryObj"></param>
     /// <param name="objEvent"></param>
     /// <param name="obj"></param>
-    internal abstract void DidReceive(object queryObj, Event objEvent, IObjectState objState);
+    internal abstract void DidReceive(object queryObj, Event objEvent, ParseObject objState);
 
     /// <summary>
     /// Abstract method for handling errors.
@@ -362,6 +424,38 @@ public abstract class Subscription : IDisposable
 /// </summary>
 public static class SubscriptionExtensions
 {
+
+    public static void On<T>(this Subscription<T> subscription, Subscription.Event evt, LiveQueryGeneralHandler<T> handler) where T : ParseObject
+    {
+        switch (evt)
+        {
+            case Subscription.Event.Create:
+                subscription.OnCreate += handler;
+                break;
+
+            case Subscription.Event.Delete:
+                subscription.OnDelete += handler;
+                break;
+            case Subscription.Event.Enter:
+                subscription.OnEnter += handler;
+                break;
+            case Subscription.Event.Leave:
+                subscription.OnLeave += handler;
+                break;
+        }
+    }
+
+
+
+    public static void OnUpdate<T>(this Subscription<T> subscription, Subscription.Event evt, LiveQueryUpdateHandler<T> handler) where T : ParseObject
+    {
+        if (evt == Subscription.Event.Update)
+        {
+            
+            subscription.OnUpdate += handler;
+        }
+    }
+
     /// <summary>
     /// Unsubscribes from the Live Query immediately.
     /// </summary>

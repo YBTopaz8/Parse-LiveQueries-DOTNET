@@ -16,10 +16,9 @@ public static class UserServiceExtensions
     }
 
 
-
     // DONE: Consider renaming SignUpAsync and LogInAsync to SignUpWithAsync and LogInWithAsync, respectively.
     // DONE: Consider returning the created user from the SignUpAsync overload that accepts a username and password.
-
+    
     /// <summary>
     /// Creates a new <see cref="ParseUser"/>, saves it with the target Parse Server instance, and then authenticates it on the target client.
     /// </summary>
@@ -27,12 +26,11 @@ public static class UserServiceExtensions
     /// <param name="username">The value that should be used for <see cref="ParseUser.Username"/>.</param>
     /// <param name="password">The value that should be used for <see cref="ParseUser.Password"/>.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    public static async Task<ParseUser> SignUpWithAsync(this IServiceHub serviceHub, string username, string password, CancellationToken cancellationToken = default)
+    public static Task SignUpWithAsync(this IServiceHub serviceHub, string username, string password, CancellationToken cancellationToken = default)
     {
-        var user = new ParseUser { Services = serviceHub, Username = username, Password = password };
-        var signedUpUser = await user.SignUpAsync(cancellationToken);
-
-        return signedUpUser;
+        var ee = new ParseUser { Services = serviceHub, Username = username, Password = password };
+        return ee.SignUpAsync(cancellationToken);
+        
     }
 
     /// <summary>
@@ -63,10 +61,10 @@ public static class UserServiceExtensions
             .ConfigureAwait(false);
 
         // Generate the ParseUser object from the returned state
-        ParseUser user = serviceHub.GenerateObjectFromState<ParseUser>(userState, "_User");
+        var user = serviceHub.GenerateObjectFromState<ParseUser>(userState, "_User");
 
         // Save the user locally
-        await SaveAndReturnCurrentUserAsync(serviceHub, user, cancellationToken).ConfigureAwait(false);
+        await SaveAndReturnCurrentUserAsync(serviceHub, user).ConfigureAwait(false);
 
         // Set the authenticated user as the current instance
         InstanceUser = user;
@@ -93,7 +91,7 @@ public static class UserServiceExtensions
         var user = serviceHub.GenerateObjectFromState<ParseUser>(userState, "_User");
 
         // Save the user locally
-        await SaveAndReturnCurrentUserAsync(serviceHub, user).ConfigureAwait(false);
+        await SaveAndReturnCurrentUserAsync(serviceHub, user, cancellationToken ).ConfigureAwait(false);
 
         // Set the authenticated user as the current instance only after successful save
         InstanceUser = user;
@@ -121,7 +119,7 @@ public static class UserServiceExtensions
     /// This is preferable to use <see cref="LogOut()"/>, unless your code is already running from a
     /// background thread.
     /// </summary>
-    public static async Task LogOutAsync(this IServiceHub serviceHub, CancellationToken cancellationToken)
+    public static async Task LogOutAsync(this IServiceHub serviceHub, CancellationToken cancellationToken=default)
     {
         // Fetch the current user
         var user = await GetCurrentUserAsync(serviceHub, cancellationToken).ConfigureAwait(false);
@@ -164,7 +162,6 @@ public static class UserServiceExtensions
     /// </summary>
     internal static async Task<ParseUser> GetCurrentUserAsync(this IServiceHub serviceHub, CancellationToken cancellationToken = default)
     {
-        
         var user = await serviceHub.CurrentUserController.GetAsync(serviceHub, cancellationToken);
         return user;
     }
@@ -294,6 +291,13 @@ public static class UserServiceExtensions
         ParseUser.Authenticators[provider.AuthType] = provider;
         ParseUser curUser = await GetCurrentUser(serviceHub);
 
-        curUser?.SynchronizeAuthData(provider);
+        if (curUser != null)
+        {
+#pragma warning disable CS1030 // #warning directive
+#warning Check if SynchronizeAllAuthData should accept an IServiceHub for consistency on which actions take place on which IServiceHub implementation instance.
+
+            curUser.SynchronizeAuthData(provider);
+#pragma warning restore CS1030 // #warning directive
+        }
     }
 }

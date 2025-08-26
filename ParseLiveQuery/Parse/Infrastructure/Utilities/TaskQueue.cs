@@ -13,7 +13,7 @@ public class TaskQueue
     /// We only need to keep the tail of the queue. Cancelled tasks will
     /// just complete normally/immediately when their turn arrives.
     /// </summary>
-    private Task Tail { get; set; } = Task.CompletedTask; // Start with a completed task to simplify logic.
+    private Task? Tail { get; set; } = Task.CompletedTask; // Start with a completed task to simplify logic.
 
     /// <summary>
     /// Gets a task that can be awaited and is dependent on the current queue's tail.

@@ -10,6 +10,7 @@ using Parse.Infrastructure.Utilities;
 using Parse.Infrastructure.Data;
 using Parse.Infrastructure.Execution;
 using Parse.Infrastructure;
+using System.Diagnostics;
 
 namespace Parse.Platform.Cloud;
 
@@ -71,10 +72,10 @@ public class ParseCloudCodeController : IParseCloudCodeController
             // Handle missing result key
             throw new ParseFailureException(ParseFailureException.ErrorCode.OtherCause, "Cloud function did not return a result.");
         }
-        catch (ParseFailureException)
+        catch (ParseFailureException ex)
         {
             // Rethrow known Parse exceptions
-            throw;
+            throw new ParseFailureException(ex.Code,ex.Message,ex);
         }
     }
 

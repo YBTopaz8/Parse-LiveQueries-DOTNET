@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Parse.Abstractions.Internal;
 using Parse.Abstractions.Infrastructure;
 using System.Diagnostics;
+using System.Xml.Linq;
 
 namespace Parse;
 
@@ -112,7 +114,7 @@ public class ParseACL : IJsonConvertible
         SetWriteAccess(owner, true);
     }
 
-    public object ConvertToJSON(IServiceHub serviceHub = default)
+    public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = default)
     {
         Dictionary<string, object> result = new Dictionary<string, object>();
         foreach (string user in readers.Union(writers))

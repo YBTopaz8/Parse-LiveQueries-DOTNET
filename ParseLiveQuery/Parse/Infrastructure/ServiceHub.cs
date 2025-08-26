@@ -39,13 +39,15 @@ public class ServiceHub : IServiceHub
     public IServerConnectionData ServerConnectionData { get; set; }
     public IMetadataController MetadataController => LateInitializer.GetValue(() => new MetadataController { HostManifestData = HostManifestData.Inferred, EnvironmentData = EnvironmentData.Inferred });
 
-    public IServiceHubCloner Cloner => LateInitializer.GetValue(() => new { } as object as IServiceHubCloner);
+    public IServiceHubCloner Cloner => LateInitializer.GetValue(() => new ConcurrentUserServiceHubCloner());
 
     public IWebClient WebClient => LateInitializer.GetValue(() => new UniversalWebClient { });
     public ICacheController CacheController => LateInitializer.GetValue(() => new CacheController { });
     public IParseObjectClassController ClassController => LateInitializer.GetValue(() => new ParseObjectClassController { });
 
+
     public IParseDataDecoder Decoder => LateInitializer.GetValue(() => new ParseDataDecoder(ClassController));
+    public IParseObjectController ObjectController => LateInitializer.GetValue(() => new ParseObjectController(CommandRunner, Decoder, ServerConnectionData));
 
     public IParseInstallationController InstallationController => LateInitializer.GetValue(() => new ParseInstallationController(CacheController));
     public IParseCommandRunner CommandRunner => LateInitializer.GetValue(() => new ParseCommandRunner(WebClient, InstallationController, MetadataController, ServerConnectionData, new Lazy<IParseUserController>(() => UserController)));
@@ -53,7 +55,7 @@ public class ServiceHub : IServiceHub
     public IParseCloudCodeController CloudCodeController => LateInitializer.GetValue(() => new ParseCloudCodeController(CommandRunner, Decoder));
     public IParseConfigurationController ConfigurationController => LateInitializer.GetValue(() => new ParseConfigurationController(CommandRunner, CacheController, Decoder));
     public IParseFileController FileController => LateInitializer.GetValue(() => new ParseFileController(CommandRunner));
-    public IParseObjectController ObjectController => LateInitializer.GetValue(() => new ParseObjectController(CommandRunner, Decoder, ServerConnectionData));
+  
     public IParseQueryController QueryController => LateInitializer.GetValue(() => new ParseQueryController(CommandRunner, Decoder));
     public IParseSessionController SessionController => LateInitializer.GetValue(() => new ParseSessionController(CommandRunner, Decoder));
     public IParseUserController UserController => LateInitializer.GetValue(() => new ParseUserController(CommandRunner, Decoder));

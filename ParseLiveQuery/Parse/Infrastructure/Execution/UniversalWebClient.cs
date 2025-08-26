@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -41,7 +42,7 @@ public class UniversalWebClient : IWebClient
     WebRequest httpRequest,
     IProgress<IDataTransferLevel> uploadProgress,
     IProgress<IDataTransferLevel> downloadProgress,
-    CancellationToken cancellationToken=default)
+    CancellationToken cancellationToken)
     {
         uploadProgress ??= new Progress<IDataTransferLevel> { };
         downloadProgress ??= new Progress<IDataTransferLevel> { };
@@ -77,51 +78,40 @@ public class UniversalWebClient : IWebClient
         uploadProgress.Report(new DataTransferLevel { Amount = 0 });
 
         HttpResponseMessage response = await Client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-
         uploadProgress.Report(new DataTransferLevel { Amount = 1 });
-        //response.EnsureSuccessStatusCode();
+
 
         long? totalLength = response.Content.Headers.ContentLength;
 
-        MemoryStream resultStream = new MemoryStream();
-        try
+        await using Stream responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using var resultStream = new MemoryStream();
+
+        int bufferSize = 4096;
+        byte[] buffer = new byte[bufferSize];
+        int bytesRead;
+        long readSoFar = 0;
+
+        
+        while ((bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
         {
-            using (var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken))
+            cancellationToken.ThrowIfCancellationRequested();
+            await resultStream.WriteAsync(buffer, 0, bytesRead, cancellationToken);
+            readSoFar += bytesRead;
+
+            
+            if (totalLength.HasValue && totalLength.Value > 0)
             {
-                byte[] buffer = new byte[4096];
-                int bytesRead;
-                long readSoFar = 0;
-
-                while ((bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await resultStream.WriteAsync(buffer, 0, bytesRead, cancellationToken);
-                    readSoFar += bytesRead;
-
-
-                    if (totalLength.HasValue && totalLength > 0)
-                    {
-                        downloadProgress.Report(new DataTransferLevel { Amount = (double)readSoFar / totalLength.Value });
-                    }
-
-
-                }
+                downloadProgress.Report(new DataTransferLevel { Amount = (double)readSoFar / totalLength.Value });
             }
-
-            if (!totalLength.HasValue || totalLength <= 0)
-            {
-                downloadProgress.Report(new DataTransferLevel { Amount = 1.0 }); // Report completion if total length is unknown
-            }
-
-
-            byte[] resultAsArray = resultStream.ToArray();
-            string resultString = Encoding.UTF8.GetString(resultAsArray, 0, resultAsArray.Length);
-
-            return new Tuple<HttpStatusCode, string>(response.StatusCode, resultString);
         }
-        finally
-        {
-           await resultStream.DisposeAsync();
-        }
+
+        
+        downloadProgress.Report(new DataTransferLevel { Amount = 1.0 });
+
+        byte[] resultAsArray = resultStream.ToArray();
+        string resultString = Encoding.UTF8.GetString(resultAsArray, 0, resultAsArray.Length);
+
+        return new Tuple<HttpStatusCode, string>(response.StatusCode, resultString);
     }
+
 }

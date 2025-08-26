@@ -14,6 +14,7 @@ using Parse.Infrastructure.Utilities;
 using Parse.Platform.Objects;
 using Parse.Infrastructure.Data;
 using System.Diagnostics;
+using Parse.Infrastructure;
 
 namespace Parse;
 
@@ -132,11 +133,26 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         catch (Exception ex)
         {
 
-            throw new Exception("Error when Creating parse Object.."+ex.Message);
+            throw new Exception("Error when Creating parse Object..",ex);
         }
     }
 
 
+
+
+    internal ParseObject(IObjectState state, IServiceHub serviceHub = default)
+    {
+        Services = serviceHub ?? ParseClient.Instance.Services;
+
+        State = state;
+
+        Fetched = true;
+        IsDirty = false;
+
+        OperationSetQueue.AddLast(new Dictionary<string, IParseFieldOperation>());
+
+        RebuildEstimatedData();
+    }
 
     /// <summary>
     /// Constructor for use in ParseObject subclasses. Subclasses must specify a ParseClassName attribute. Subclasses that do not implement a constructor accepting <see cref="IServiceHub"/> will need to be bond to an implementation instance via <see cref="Bind(IServiceHub)"/> after construction.
@@ -268,8 +284,12 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     {
         get => State.ObjectId;
         set
-        {
-            IsDirty = true;
+        {  // Only mark as dirty if the object isn't in the middle of a fetch.
+           // We check if the object is already "Fetched" to decide.
+            if (!Fetched)
+            {
+                IsDirty = true;
+            }
             SetObjectIdInternal(value);
         }
     }
@@ -467,6 +487,10 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <param name="key">The key to check for</param>
     public bool ContainsKey(string key)
     {
+        if (key is null)
+        {
+            return false;
+        }
         lock (Mutex)
         {
             return EstimatedData.ContainsKey(key);
@@ -638,9 +662,9 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// Saves this object to the server.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
-    public async Task SaveAsync(CancellationToken cancellationToken = default)
+    public Task SaveAsync(CancellationToken cancellationToken = default)
     {
-        await TaskQueue.Enqueue(toAwait => SaveAsync(toAwait, cancellationToken), cancellationToken);        
+        return TaskQueue.Enqueue(toAwait => SaveAsync(toAwait, cancellationToken), cancellationToken);
     }
 
     /// <summary>
@@ -803,11 +827,27 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
 
     public virtual void HandleFetchResult(IObjectState serverState)
     {
+
+        if (serverState == null)
+            return;
+
         lock (Mutex)
         {
-            MergeFromServer(serverState);
+            MutateState(mutableClone => mutableClone.Apply(serverState));
+
+            Fetched = true;
+            IsDirty = false;
+
+            if (serverState.ObjectId != null)
+            {
+                SetObjectIdInternal(serverState.ObjectId);
+            }
+
         }
+
+        OnPropertyChanged();
     }
+
 
     internal virtual void HandleSave(IObjectState serverState)
     {
@@ -991,13 +1031,10 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
             foreach (IDictionary<string, IParseFieldOperation> operations in OperationSetQueue)
             {
                 ApplyOperations(operations, EstimatedData);
+                
+
+                OnFieldsChanged(default);
             }
-
-            // We've just applied a bunch of operations to estimatedData which
-            // may have changed all of its keys. Notify of all keys and properties
-            // mapped to keys being changed.
-
-            OnFieldsChanged(default);
         }
     }
 
@@ -1121,9 +1158,28 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// </summary>
     protected void OnFieldsChanged(IEnumerable<string> fields)
     {
+
+        if (fields is null)
+        {
+            return;
+        }
+        
+        if (Services?.ClassController == null)
+        {
+            return;
+        }
+
+        
         IDictionary<string, string> mappings = Services.ClassController.GetPropertyMappings(ClassName);
 
-        foreach (string property in mappings is { } ? fields is { } ? from mapping in mappings join field in fields on mapping.Value equals field select mapping.Key : mappings.Keys : Enumerable.Empty<string>())
+        
+        if (mappings == null)
+        {
+            return;
+        }
+
+        
+        foreach (string property in fields is { } ? (from mapping in mappings join field in fields on mapping.Value equals field select mapping.Key) : mappings.Keys)
         {
             OnPropertyChanged(property);
         }
@@ -1174,11 +1230,18 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
             // Handle the cancellation case
             HandleFailedSave(currentOperations);
         }
-        catch (Exception ex)
+        
+        catch (ParseFailureException ex)
         {
             // Log or handle unexpected errors
             HandleFailedSave(currentOperations);
-            throw new Exception(ex.Message);
+            throw new ParseFailureException(ex.Code,ex.Message);
+        }
+        catch (Exception ex)
+        {
+            // Handle any other exceptions that may occur
+            HandleFailedSave(currentOperations);
+            throw new Exception("An error occurred while saving the ParseObject.", ex);
         }
     }
 

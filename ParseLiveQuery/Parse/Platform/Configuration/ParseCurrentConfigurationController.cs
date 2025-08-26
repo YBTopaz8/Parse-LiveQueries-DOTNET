@@ -2,7 +2,6 @@ using System.Threading.Tasks;
 using Parse.Abstractions.Infrastructure.Data;
 using Parse.Abstractions.Infrastructure;
 using Parse.Abstractions.Platform.Configuration;
-using System.Collections.Generic;
 
 namespace Parse.Platform.Configuration;
 
@@ -43,11 +42,8 @@ internal class ParseCurrentConfigurationController : IParseCurrentConfigurationC
         _currentConfiguration = target;
 
         var data = await _storageController.LoadAsync();
-        var jsonData = ((IJsonConvertible)target).ConvertToJSON() as IDictionary<string, object>;
-
-        await data.AddAsync(CurrentConfigurationKey, ParseClient.SerializeJsonString(jsonData));
+        await data.AddAsync(CurrentConfigurationKey, ParseClient.SerializeJsonString(((IJsonConvertible) target).ConvertToJSON()));
     }
-
 
     public async Task ClearCurrentConfigAsync()
     {

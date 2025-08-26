@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Parse.Abstractions.Platform.Authentication;
@@ -29,11 +30,15 @@ public class ParseUser : ParseObject
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Exception here when checking if is authenticated"+ex.Message);
+
             return false;
         }
     }
 
+    public static ParseUser CurrentUser
+    {
+        get => ParseClient.Instance.CurrentUser;
+    }
     public override void Remove(string key)
     {
         if (key == "username")
@@ -113,7 +118,7 @@ public class ParseUser : ParseObject
         {
             
             HandleFailedSave(currentOperations);
-            throw new Exception(ex.Message);
+            throw;
         }
     }
 
@@ -135,8 +140,7 @@ public class ParseUser : ParseObject
 
     internal override async Task<ParseObject> FetchAsyncInternal(CancellationToken cancellationToken)
     {
-        //await toAwait.ConfigureAwait(false);
-
+     
         var result = await base.FetchAsyncInternal(cancellationToken).ConfigureAwait(false);
 
         if (Services.CurrentUserController.IsCurrent(this))
@@ -167,8 +171,7 @@ public class ParseUser : ParseObject
         var newSessionToken = await Services.UpgradeToRevocableSessionAsync(sessionToken, cancellationToken).ConfigureAwait(false);
         await SetSessionTokenAsync(newSessionToken, cancellationToken).ConfigureAwait(false);
     }
-    //public string SessionToken => State.ContainsKey("sessionToken") ? State["sessionToken"] as string : null;
-
+ 
     public IDictionary<string, IDictionary<string, object>> AuthData
     {
 

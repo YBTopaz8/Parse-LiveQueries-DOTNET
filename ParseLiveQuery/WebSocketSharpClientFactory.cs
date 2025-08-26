@@ -83,40 +83,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
     }
 
     public IObservable<ReadOnlyMemory<byte>> BinaryMessages => throw new NotImplementedException();
-
- 
     
-    
-
-
-    public async Task Send(string message)
-    {
-        if (_disposed)
-        {
-            return; 
-        }
-
-        if (_webSocket.State != System.Net.WebSockets.WebSocketState.Open)
-        {
-            var exception = new InvalidOperationException("WebSocket is not connected.");
-            _errors.OnNext(exception);
-            _webSocketClientCallback.OnError(exception);
-            return;
-        }
-
-        try
-        {
-            var buffer = Encoding.UTF8.GetBytes(message);
-            var segment = new ArraySegment<byte>(buffer);
-            await _webSocket.SendAsync(segment, WebSocketMessageType.Text, true, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            _errors.OnNext(ex);
-            _webSocketClientCallback.OnError(ex);
-        }
-    }
-
 
 
     public async Task OpenAsync(CancellationToken cancellationToken = default)
@@ -317,7 +284,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
             
             if (buffer != null)
                 ArrayPool<byte>.Shared.Return(buffer); 
-            messageStream?.DisposeAsync(); 
+           messageStream?.Dispose(); 
         }
 
         

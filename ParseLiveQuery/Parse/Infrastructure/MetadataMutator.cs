@@ -8,7 +8,7 @@ namespace Parse.Infrastructure;
 public class MetadataMutator : MetadataController, IServiceHubMutator
 {
     /// <summary>
-    /// A value representing whether or not all of the metadata information has been provided.
+    /// A value representing whether or not all of the required metadata information has been provided.
     /// </summary>
     public bool Valid => this is { EnvironmentData: { OSVersion: { }, Platform: { }, TimeZone: { } }, HostManifestData: { Identifier: { }, Name: { }, ShortVersion: { }, Version: { } } };
 
