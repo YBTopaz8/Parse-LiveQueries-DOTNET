@@ -166,20 +166,26 @@ public class CacheController : IDiskFileCacheController
             }
         }
 
+        private readonly SemaphoreSlim _asyncFileLock = new SemaphoreSlim(1, 1);
+
         public async Task AddAsync(string key, object value)
         {
-            _rwLock.EnterWriteLock();
+            // Asynchronously wait to acquire the semaphore. Only one thread/task
+            // can pass this line at a time.
+            await _asyncFileLock.WaitAsync().ConfigureAwait(false);
             try
             {
+              
                 Storage[key] = value;
+
+                await SaveAsync().ConfigureAwait(false);
             }
             finally
             {
-                _rwLock.ExitWriteLock();
+                // Release the semaphore so the next waiting task can enter.
+                _asyncFileLock.Release();
             }
-            await SaveAsync().ConfigureAwait(false);
         }
-
         public async Task RemoveAsync(string key)
         {
             _rwLock.EnterWriteLock();
