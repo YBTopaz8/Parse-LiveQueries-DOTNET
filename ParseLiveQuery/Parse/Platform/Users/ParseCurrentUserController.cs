@@ -10,7 +10,6 @@ using Parse.Abstractions.Platform.Users;
 using Parse.Infrastructure.Utilities;
 using Parse.Infrastructure.Data;
 using System;
-using System.Diagnostics;
 
 namespace Parse.Platform.Users;
 

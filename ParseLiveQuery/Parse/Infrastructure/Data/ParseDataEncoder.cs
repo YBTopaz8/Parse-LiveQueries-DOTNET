@@ -1,12 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
-using System.Runtime.ExceptionServices;
 
 using Parse.Abstractions.Infrastructure;
-using Parse.Abstractions.Infrastructure.Control;
 using Parse.Abstractions.Platform.Objects;
 using Parse.Infrastructure.Control;
 using Parse.Infrastructure.Utilities;

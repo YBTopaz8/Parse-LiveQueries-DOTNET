@@ -9,10 +9,7 @@
 // </Summary>
 
 
-using Parse.Abstractions.Platform.Objects;
-
 using System;
-using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
