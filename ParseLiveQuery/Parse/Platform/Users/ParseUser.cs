@@ -28,7 +28,7 @@ public class ParseUser : ParseObject
             // Check if the current user's ObjectId matches
             return currentUser?.ObjectId == ObjectId;
         }
-        catch (Exception ex)
+        catch
         {
 
             return false;
@@ -114,7 +114,7 @@ public class ParseUser : ParseObject
 
             return usr;
         }
-        catch (Exception ex)
+        catch
         {
             
             HandleFailedSave(currentOperations);
