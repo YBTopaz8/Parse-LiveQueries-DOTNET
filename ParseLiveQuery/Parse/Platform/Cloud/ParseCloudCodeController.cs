@@ -60,6 +60,7 @@ public class ParseCloudCodeController : IParseCloudCodeController
             {
                 try
                 {
+                    result.GetType();
                     return Conversion.To<T>(result);
                 }
                 catch (Exception ex)
