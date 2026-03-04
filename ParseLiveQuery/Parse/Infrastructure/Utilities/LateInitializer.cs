@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 
 #if DEBUG
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Parse.Tests")]
@@ -26,8 +27,15 @@ internal class LateInitializer
             else
             {
                 TData result = generator.Invoke();
+                if (!Storage.Value.ContainsKey(generator as Func<object>))
+                {
+                    Storage.Value.Add(generator as Func<object>, result);
+                }
+                else
+                {
+                    Storage.Value[generator as Func<object>] = result;
 
-                Storage.Value.Add(generator as Func<object>, result);
+                }
                 return result;
             }
         }
