@@ -39,6 +39,8 @@ public abstract class ParseDataEncoder
             value is ParseRelationBase ||
             value is DateTime ||
             value is byte[] ||
+            value is Guid ||
+            value is Uri ||
             value is Array ||
             Conversion.As<IDictionary<string, object>>(value) is { } ||
             Conversion.As<IDictionary<string, string>>(value) is { } ||
@@ -66,6 +68,8 @@ public abstract class ParseDataEncoder
 
             // Byte array encoding
             byte[] bytes => EncodeBytes(bytes),
+            Uri uri => uri.ToString(),
+            Guid guid => guid.ToString(),
 
             // ParseObject encoding
             ParseObject entity => EncodeObject(entity),
