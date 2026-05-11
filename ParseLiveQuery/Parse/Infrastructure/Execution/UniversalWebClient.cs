@@ -77,13 +77,13 @@ public class UniversalWebClient : IWebClient
 
         uploadProgress.Report(new DataTransferLevel { Amount = 0 });
 
-        HttpResponseMessage response = await Client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        HttpResponseMessage response = await Client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         uploadProgress.Report(new DataTransferLevel { Amount = 1 });
 
 
         long? totalLength = response.Content.Headers.ContentLength;
 
-        await using Stream responseStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using Stream responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
         await using var resultStream = new MemoryStream();
 
         int bufferSize = 4096;
@@ -95,7 +95,7 @@ public class UniversalWebClient : IWebClient
         while ((bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await resultStream.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
+            await resultStream.WriteAsync(buffer, 0, bytesRead, cancellationToken);
             readSoFar += bytesRead;
 
             

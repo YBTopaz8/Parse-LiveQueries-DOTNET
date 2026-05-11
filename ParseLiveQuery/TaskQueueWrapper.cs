@@ -18,28 +18,22 @@ internal class TaskQueueWrapper : ITaskQueue
         }, CancellationToken.None);
     }
 
-   
-
-    public Task EnqueueOnSuccess<TIn>(Func<Task<TIn>> taskFactory, Func<Task<TIn>, Task> onSuccess)
+    public Task EnqueueOnSuccess<TIn>(Task<TIn> task, Func<Task<TIn>, Task> onSuccess)
     {
-        return _underlying.Enqueue(async cancellationToken =>
+        return _underlying.Enqueue(async cancellationToken => 
         {
             try
             {
-                // The task is born and started right here, inside the queue
-                Task<TIn> task = taskFactory();
-
-                await task.ConfigureAwait(false);
-                await onSuccess(task).ConfigureAwait(false);
+                await task.ConfigureAwait(false); 
+                await onSuccess(task).ConfigureAwait(false); 
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException("Task failed in queue.", ex);
-               
-
+                throw new InvalidOperationException("Error during EnqueueOnSuccess execution", ex);
             }
-        }, CancellationToken.None);
+        }, CancellationToken.None); 
     }
+
     public async Task EnqueueOnError(Task task, Action<Exception> onError)
     {
         try
