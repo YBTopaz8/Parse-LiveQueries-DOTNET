@@ -5,6 +5,7 @@ using System.IO;
 using System.Net.WebSockets;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -248,7 +249,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
                     var message = Encoding.UTF8.GetString(messageStream.GetBuffer(), 0, (int)messageStream.Length);
                     
                     _messages.OnNext(message); 
-                    await _webSocketClientCallback.OnMessage(message); 
+                    await _webSocketClientCallback.OnMessageAsync(message); 
                 }
                 else if (receiveResult.MessageType == WebSocketMessageType.Binary)
                 {
@@ -377,7 +378,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
             if (State is WebSocketState.Closed or WebSocketState.None)
             {
                 
-                return;
+                return ;
             }
 
             internalCtsToCancel = _internalCts; 
@@ -415,7 +416,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
                 if (socketToClose.State == System.Net.WebSockets.WebSocketState.Open ||
                     socketToClose.State == System.Net.WebSockets.WebSocketState.CloseReceived) 
                 {
-                    await socketToClose.CloseAsync(closeStatus, statusDescription, closeCts.Token);
+                  await socketToClose.CloseAsync(closeStatus, statusDescription, closeCts.Token).ConfigureAwait(false);
                     
                 }
             }
@@ -471,7 +472,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
                 newWebSocket.Options.KeepAliveInterval = _keepAliveInterval; 
 
                 
-                await newWebSocket.ConnectAsync(_hostUri, combinedToken);
+                await newWebSocket.ConnectAsync(_hostUri, combinedToken).ConfigureAwait(false);
 
                 
                 
@@ -480,7 +481,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
                 _reconnectionAttempts = 0; 
 
                 
-                await _webSocketClientCallback.OnOpen();
+                await _webSocketClientCallback.OnOpenAsync().ConfigureAwait(false);
                 _ = Task.Run(() => ReceiveLoopAsync(_internalCts.Token), combinedToken); 
 
                 return; 
@@ -520,7 +521,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
         var finalException = new Exception($"Failed to connect after {MaxReconnectionAttempts} attempts.");
         
         ReportError(finalException);
-        await HandleConnectionClosedOrFailedAsync("Max reconnection attempts reached.");
+        await HandleConnectionClosedOrFailedAsync("Max reconnection attempts reached.").ConfigureAwait(false);
         
         
     }
