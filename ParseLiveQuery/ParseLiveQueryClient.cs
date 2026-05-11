@@ -155,14 +155,21 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
     public void ConnectIfNeeded()
     {
-        lock (_stateLock)
+        try
         {
-            if (ConnectionState == LiveQueryConnectionState.Disconnected || ConnectionState == LiveQueryConnectionState.Failed)
+            lock (_stateLock)
             {
-               _=  ReconnectAsync();
+                if (ConnectionState == LiveQueryConnectionState.Disconnected || ConnectionState == LiveQueryConnectionState.Failed)
+                {
+                    _ = ReconnectAsync();
+                    return;
+                }
                 return;
             }
-            return ;
+        }
+        catch (Exception ex)
+        {
+            _errorSubject.OnNext(new LiveQueryException.InvalidResponseException(ex.Message, ex));
         }
     }
     private void OnWebSocketClosed(WebSocketCloseStatus? status, string description)
@@ -194,7 +201,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
             var subscription = pair.Value;
 
             
-            await SendUnsubscriptionAsync(subscription);
+            await SendUnsubscriptionAsync(subscription).ConfigureAwait(false);
 
             if (_subscriptions.TryRemove(requestId, out _)&&!string.IsNullOrEmpty(subscription.Name))
             {
@@ -207,14 +214,14 @@ public class ParseLiveQueryClient :IAsyncDisposable
     {
         if (query == null)
             return;
-        await RemoveSubscriptions(query, null);
+        await RemoveSubscriptions(query, null).ConfigureAwait(false);
     }
 
     public async Task Unsubscribe<T>(ParseQuery<T> query, Subscription<T> subscription) where T : ParseObject
     {
         if (query == null || subscription == null)
             return;
-        await RemoveSubscriptions(query, subscription);
+        await RemoveSubscriptions(query, subscription).ConfigureAwait(false);
     }
 
     
@@ -229,7 +236,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
         foreach (var pair in subscriptionsToRemove)
         {
             
-            await SendUnsubscriptionAsync(pair.Value);
+            await SendUnsubscriptionAsync(pair.Value).ConfigureAwait(false);
             if (_subscriptions.TryRemove(pair.Key, out var removedSubscription)&&!string.IsNullOrEmpty(removedSubscription.Name))
             {
                 _namedSubscriptions.TryRemove(removedSubscription.Name, out _);
@@ -247,7 +254,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
         
         
         _webSocketClient = _webSocketClientFactory(_hostUri, new WebSocketClientCallback(this), 8094); 
-        await _webSocketClient.OpenAsync();
+        await _webSocketClient.OpenAsync().ConfigureAwait(false);
         if (_webSocketClient.State == WebSocketState.Open)
         {
             
@@ -290,20 +297,23 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
     private async Task SendUnsubscriptionAsync(Subscription subscription)
     {
-        await SendOperationAsync(new UnsubscribeClientOperation(subscription.RequestID));
+        await SendOperationAsync(new UnsubscribeClientOperation(subscription.RequestID)).ConfigureAwait(false);
     }
 
 
 
     private Task SendOperationWithSessionAsync(Func<string, IClientOperation> operationFunc)
     {
-        return _taskQueue.EnqueueOnSuccess(
-            ParseClient.Instance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClient.Instance.Services, CancellationToken.None),
-       currentSessionTokenTask =>
-       {
-           var sessionToken = currentSessionTokenTask?.Result;
-           return SendOperationAsync(operationFunc(sessionToken));
-       });
+
+        return _taskQueue.EnqueueOnSuccess<string>(
+
+            () => ParseClient.Instance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClient.Instance.Services, CancellationToken.None),
+
+            async currentSessionTokenTask =>
+            {
+                string sessionToken = await currentSessionTokenTask.ConfigureAwait(false);
+                await SendOperationAsync(operationFunc(sessionToken)).ConfigureAwait(false);
+            });
     }
 
     private Task SendOperationAsync(IClientOperation operation)
@@ -311,7 +321,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
         // If we are connected, send immediately.
         if ( _webSocketClient?.State == WebSocketState.Open)
         {
-            return _taskQueue.Enqueue(async () => await _webSocketClient.SendAsync(operation.ToJson()));
+            return _taskQueue.Enqueue(async () => await _webSocketClient.SendAsync(operation.ToJson()).ConfigureAwait(false));
         }
 
         _operationQueue.Enqueue(operation);
@@ -330,7 +340,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
             try
             {
                 // Send the queued operation. We add a small delay to avoid overwhelming the server on a fresh connection.
-                await SendOperationAsync(operation);
+                await SendOperationAsync(operation).ConfigureAwait(false);
                 await Task.Delay(100); // Small buffer between queued messages
             }
             catch (ParseFailureException ex)
@@ -346,7 +356,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
     private Task HandleOperationAsync(string message)
     {
-        return _taskQueue.Enqueue(async () => await ParseMessage(message));
+        return _taskQueue.Enqueue(async () => await ParseMessage(message).ConfigureAwait(false));
     }
   
     private static object ConvertJsonNumber(JsonElement element)
@@ -414,11 +424,11 @@ public class ParseLiveQueryClient :IAsyncDisposable
                     {
                         SetConnectionState(LiveQueryConnectionState.Connected);
                         _connectedSubject.OnNext(this);
-                    });
+                    }).ConfigureAwait(false);
 
                     var resubscribeTasks = _subscriptions.Values.Select(sub => SendSubscriptionAsync(sub));
-                    await Task.WhenAll(resubscribeTasks);
-                    await ProcessOperationQueueAsync();
+                    await Task.WhenAll(resubscribeTasks).ConfigureAwait(false);
+                    await ProcessOperationQueueAsync().ConfigureAwait(false);
                     break;
                 case "subscribed":
                     await _taskQueue.Enqueue(() => HandleSubscribedEvent(jsonObject));
@@ -649,7 +659,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
             _client = client;
         }
 
-        public async Task OnOpen()
+        public async Task OnOpenAsync()
         {
             try
             {
@@ -669,7 +679,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
         }
 
 
-        public async Task OnMessage(string message)
+        public async Task OnMessageAsync(string message)
         {
             try
             {
@@ -768,8 +778,8 @@ public record DisconnectInfo(
 );
 public interface IWebSocketClientCallback
 {
-    Task OnOpen();
-    Task OnMessage(string message);
+    Task OnOpenAsync();
+    Task OnMessageAsync(string message);
     //void OnClose();
     void OnClose(WebSocketCloseStatus? status, string description);
     void OnError(Exception exception);
