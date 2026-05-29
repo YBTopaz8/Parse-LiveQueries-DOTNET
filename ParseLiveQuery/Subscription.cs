@@ -345,7 +345,7 @@ public abstract class Subscription : IDisposable
             UnsubscribeInternal();
             return;
         }
-        _unsubscribeCts.Dispose();
+        _unsubscribeCts?.Dispose();
         _unsubscribeCts = new CancellationTokenSource();
         Task.Delay(TimeSpan.FromMinutes(timeInMinutes), _unsubscribeCts.Token)
             .ContinueWith(t =>
@@ -432,7 +432,10 @@ public static class SubscriptionExtensions
             case Subscription.Event.Create:
                 subscription.OnCreate += handler;
                 break;
-
+            case Subscription.Event.Update:
+              
+                subscription.OnUpdate += (original,updated) => handler(updated);
+                break;
             case Subscription.Event.Delete:
                 subscription.OnDelete += handler;
                 break;
@@ -445,15 +448,13 @@ public static class SubscriptionExtensions
         }
     }
 
+   
 
 
-    public static void OnUpdate<T>(this Subscription<T> subscription, Subscription.Event evt, LiveQueryUpdateHandler<T> handler) where T : ParseObject
+    public static void OnUpdate<T>(this Subscription<T> subscription, LiveQueryUpdateHandler<T> handler) where T : ParseObject
     {
-        if (evt == Subscription.Event.Update)
-        {
-            
             subscription.OnUpdate += handler;
-        }
+        
     }
 
     /// <summary>

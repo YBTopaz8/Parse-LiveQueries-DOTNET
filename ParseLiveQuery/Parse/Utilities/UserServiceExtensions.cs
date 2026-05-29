@@ -28,8 +28,8 @@ public static class UserServiceExtensions
     /// <param name="cancellationToken">The cancellation token.</param>
     public static Task SignUpWithAsync(this IServiceHub serviceHub, string username, string password, CancellationToken cancellationToken = default)
     {
-        var ee = new ParseUser { Services = serviceHub, Username = username, Password = password };
-        return ee.SignUpAsync(cancellationToken);
+        var Puser = new ParseUser { Services = serviceHub, Username = username, Password = password };
+        return Puser.SignUpAsync(cancellationToken);
         
     }
 

@@ -469,8 +469,10 @@ public class WebSocketClient : IWebSocketClient, IDisposable
             try
             {
                 newWebSocket = new ClientWebSocket();
-                newWebSocket.Options.KeepAliveInterval = _keepAliveInterval; 
-
+                if (!OperatingSystem.IsBrowser())
+                {
+                    newWebSocket.Options.KeepAliveInterval = _keepAliveInterval;
+                }
                 
                 await newWebSocket.ConnectAsync(_hostUri, combinedToken).ConfigureAwait(false);
 
