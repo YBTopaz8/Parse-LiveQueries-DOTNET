@@ -100,11 +100,16 @@ public class Subscription<T> : Subscription where T : ParseObject
     /// <param name="parseObject">The state of the ParseObject involved in the event.</param>
 
 
-    internal override void DidReceive(object queryObj, Event objEvent, ParseObject obj)
+    internal override void DidReceive(object queryObj, Event objEvent, ParseObject obj, ParseObject? OriginalObject=null)
     {
         
 
         var typedObj = (T)obj;
+        T typedOG = null;
+        if(OriginalObject is not null)
+        {
+            typedOG = (T)OriginalObject;
+        }
         var query = (ParseQuery<T>)queryObj;
 
         // Fire the specific event handler directly.
@@ -114,9 +119,9 @@ public class Subscription<T> : Subscription where T : ParseObject
                 OnCreate?.Invoke(typedObj);
                 break;
             case Event.Update:
-                OnUpdate?.Invoke(typedObj, null);
+                OnUpdate?.Invoke(typedOG,typedObj );
 
-                break; // Passing null for original for now
+                break;
             case Event.Delete:
                 OnDelete?.Invoke(typedObj);
                 break;
@@ -286,7 +291,7 @@ public abstract class Subscription : IDisposable
     /// <param name="queryObj"></param>
     /// <param name="objEvent"></param>
     /// <param name="obj"></param>
-    internal abstract void DidReceive(object queryObj, Event objEvent, ParseObject objState);
+    internal abstract void DidReceive(object queryObj, Event objEvent, ParseObject objState, ParseObject? OriginalObject=null);
 
     /// <summary>
     /// Abstract method for handling errors.

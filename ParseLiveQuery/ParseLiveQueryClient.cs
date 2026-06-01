@@ -475,26 +475,36 @@ public class ParseLiveQueryClient :IAsyncDisposable
         try
         {
             int requestId = Convert.ToInt32(jsonObject["requestId"]);
-            
+
 
 
             if (_subscriptions.TryGetValue(requestId, out var subscription))
             {
-                
+
 
                 var jsonElement = (JsonElement)jsonObject["object"];
+
+
+
                 var objectData = JsonElementToDictionary(jsonElement);
-
-
 
                 var obj = ParseClient.Instance.Decoder.Decode(objectData, ParseClientInstance);
 
+                if (jsonObject.TryGetValue("original", out var message))
+                
+                { 
+                    var originalObjectData = JsonElementToDictionary((JsonElement)message);
 
-                if (obj != null)
-                {
-                    // Directly route the event to the correct subscription.
-                    subscription.DidReceive(subscription.QueryObj, subscriptionEvent, obj as ParseObject);
+                    var originalParseObj = ParseClient.Instance.Decoder.Decode(originalObjectData, ParseClientInstance);
+
+                    subscription.DidReceive(subscription.QueryObj, subscriptionEvent, obj as ParseObject, originalParseObj as ParseObject);
+
+                    return;
                 }
+
+
+                    subscription.DidReceive(subscription.QueryObj, subscriptionEvent, obj as ParseObject);
+                
             }
         }
         catch (Exception ex)

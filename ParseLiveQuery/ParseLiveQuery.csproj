@@ -9,12 +9,12 @@
     <Authors>Yvan Brunel</Authors>
     <Company>Me</Company>
     <Description>A Modern .NET library for Parse Live Query. Compatible With .NET MAUI for Windows, Android, MacOS, iOS too, Now Smart Watches ;)</Description>
-    <PackageTags>Parse, LiveQuery, .NET, MAUI, CROSS-PLATFORM, LINQ, ReactiveX</PackageTags>
+    <PackageTags>Parse, LiveQuery, .NET, MAUI, CROSS-PLATFORM, LINQ, ReactiveX, WASM</PackageTags>
     <RepositoryUrl>https://github.com/YBTopaz8/parse-live-query-dotnet</RepositoryUrl>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageProjectUrl>https://github.com/YBTopaz8/parse-live-query-dotnet</PackageProjectUrl>
     <PackageReadmFile>Readme.md</PackageReadmFile>
-    <Version>3.5.0</Version>
+    <Version>3.6.1</Version>
   </PropertyGroup>
   <PropertyGroup>
     <PackageReleaseNotes>See detailed release notes in ReleaseNotes.md</PackageReleaseNotes>
@@ -36,7 +36,7 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <Copyright>MIT License - (c) 2025 Yvan Brunel</Copyright>
+    <Copyright>MIT License - (c) 2026 Yvan Brunel</Copyright>
     <PackageIcon>paaarse.png</PackageIcon>
     <PackageReadmeFile>ReleaseNotes.md</PackageReadmeFile>
   </PropertyGroup>
