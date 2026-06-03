@@ -227,7 +227,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
 
                             var closeStatus = _webSocket.CloseStatus;
                             var statusDescription = _webSocket.CloseStatusDescription;
-                            await HandleConnectionClosedOrFailedAsync("Server initiated close.", closeStatus, statusDescription); // Pass details
+                            await HandleConnectionClosedOrFailedAsync("Server initiated close."); // Pass details
                             return;
 
                         default:
@@ -446,7 +446,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
     }
 
 
-    private async Task HandleConnectionClosedOrFailedAsync(string reason, WebSocketCloseStatus? status = null, string? description = null)
+    private async Task HandleConnectionClosedOrFailedAsync(string reason)
     {
 
 
