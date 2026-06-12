@@ -82,7 +82,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
 
     private readonly object _stateLock = new();
-    private readonly LiveQueryConnectionState _connectionState = LiveQueryConnectionState.Disconnected;
+    private LiveQueryConnectionState _connectionState = LiveQueryConnectionState.Disconnected;
     public LiveQueryConnectionState ConnectionState
     {
         get
@@ -146,12 +146,13 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
         Start();
 
-      
-        //await SendSubscriptionAsync(subscription);
+        if (ConnectionState == LiveQueryConnectionState.Connected)
+        {
+            _ = SendSubscriptionAsync(subscription);
+        }
 
         return subscription;
     }
-
 
     public void ConnectIfNeeded()
     {
@@ -161,6 +162,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
             {
                 if (ConnectionState == LiveQueryConnectionState.Disconnected || ConnectionState == LiveQueryConnectionState.Failed)
                 {
+
                     _ = ReconnectAsync();
                     return;
                 }
@@ -289,7 +291,10 @@ public class ParseLiveQueryClient :IAsyncDisposable
     private Task SendSubscriptionAsync(Subscription subscription)
     {
        return  _taskQueue.EnqueueOnError(
-            SendOperationWithSessionAsync(session => subscription.CreateSubscribeClientOperation(session ?? string.Empty)),
+            SendOperationWithSessionAsync(session =>
+            {
+                return subscription.CreateSubscribeClientOperation(session ?? string.Empty);
+            }),
             error => subscription.DidEncounter(subscription.QueryObj, new LiveQueryException.UnknownException("Error when subscribing", error))
         );
     }
@@ -420,11 +425,8 @@ public class ParseLiveQueryClient :IAsyncDisposable
             switch (rawOperation)
             {
                 case "connected":
-                    await _taskQueue.Enqueue(() =>
-                    {
-                        SetConnectionState(LiveQueryConnectionState.Connected);
-                        _connectedSubject.OnNext(this);
-                    }).ConfigureAwait(false);
+                    SetConnectionState(LiveQueryConnectionState.Connected);
+                    _connectedSubject.OnNext(this); 
 
                     var resubscribeTasks = _subscriptions.Values.Select(sub => SendSubscriptionAsync(sub));
                     await Task.WhenAll(resubscribeTasks).ConfigureAwait(false);
@@ -730,6 +732,8 @@ public class ParseLiveQueryClient :IAsyncDisposable
         {
             if (_connectionState == state)
                 return;
+
+            _connectionState = state;
             _connectionStateSubject.OnNext(state);
         }
     }
