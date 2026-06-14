@@ -74,9 +74,14 @@ public abstract class ParseDataEncoder
             // ParseObject encoding
             ParseObject entity => EncodeObject(entity),
 
-            // JSON-convertible types
-            ParseSetOperation setOperation => setOperation.ConvertValueToJSON(serviceHub),
-            IJsonConvertible jsonConvertible => jsonConvertible.ConvertToJSON(serviceHub),
+
+            ParseACL acl => Encode(acl.ConvertToJSON(serviceHub), serviceHub),
+
+            // 2. RECURSIVELY encode the output of a SetOperation!
+            ParseSetOperation setOperation => Encode(setOperation.ConvertValueToJSON(serviceHub), serviceHub),
+
+            // 3. RECURSIVELY encode the output of any other JsonConvertible!
+            IJsonConvertible jsonConvertible => Encode(jsonConvertible.ConvertToJSON(serviceHub), serviceHub),
 
             // Dictionary encoding
             IDictionary<string, object> dictionary => EncodeDictionary(dictionary, serviceHub),

@@ -302,9 +302,9 @@ public static class ObjectServiceExtensions
     /// Saves each object in the provided list.
     /// </summary>
     /// <param name="objects">The objects to save.</param>
-    public static Task SaveObjectsAsync<T>(this IServiceHub serviceHub, IEnumerable<T> objects) where T : ParseObject
+    public static async Task SaveObjectsAsync<T>(this IServiceHub serviceHub, IEnumerable<T> objects) where T : ParseObject
     {
-        return SaveObjectsAsync(serviceHub, objects, CancellationToken.None);
+         await SaveObjectsAsync(serviceHub, objects, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -314,7 +314,7 @@ public static class ObjectServiceExtensions
     /// <param name="cancellationToken">The cancellation token.</param>
     public static async Task SaveObjectsAsync<T>(this IServiceHub serviceHub, IEnumerable<T> objects, CancellationToken cancellationToken) where T : ParseObject
     {
-        _ = DeepSaveAsync(serviceHub, objects.ToList(), await serviceHub.GetCurrentSessionToken(), cancellationToken);
+        await DeepSaveAsync(serviceHub, objects.ToList(), await serviceHub.GetCurrentSessionToken(), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -351,20 +351,7 @@ public static class ObjectServiceExtensions
         // Get the class name, but we won't use it for the constructor.
         string className = state.ClassName ?? defaultClassName;
 
-        // We can't call `new T(state)` directly due to generic constraints.
-        // We must use reflection to find and invoke our new internal constructor.
 
-        //var constructor = typeof(T).GetConstructor(
-        //    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
-        //    null,
-        //    new[] { typeof(IObjectState), typeof(IServiceHub) },
-        //    null
-        //);
-
-        //if (constructor == null)
-        //{
-        //    // Fallback for subclasses that might not have this constructor.
-        //    // This preserves old behavior but our main path is the new one.
         try
         {
             T obj = classController.Instantiate(className, serviceHub) as T;
@@ -374,8 +361,8 @@ public static class ObjectServiceExtensions
         }
         catch (Exception ex)
         {
-
-            throw new Exception(ex.Message,ex.InnerException);
+            // Preserve the original exception type and stack trace for easier debugging
+            throw new InvalidOperationException($"Failed to generate ParseObject subclass '{typeof(T).Name}' from server state for class '{className}'. Ensure the subclass is registered.", ex);
         }
     }
     internal static IDictionary<string, object> GenerateJSONObjectForSaving(

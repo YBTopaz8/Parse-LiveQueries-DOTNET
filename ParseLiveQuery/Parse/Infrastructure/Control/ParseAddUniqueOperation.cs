@@ -57,12 +57,13 @@ public class ParseAddUniqueOperation : IParseFieldOperation
 
     public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = default)
     {
-        // Converts the data into JSON-compatible structures
-        var encodedObjects = Data.Select(EncodeForParse).ToList();
+        // Use your centralized encoder instead of duplicating logic!
+        var encoder = PointerOrLocalIdEncoder.Instance;
+        var encodedObjects = Data.Select(obj => encoder.Encode(obj, serviceHub)).ToList();
 
         return new Dictionary<string, object>
         {
-            ["__op"] = "AddUnique", // Parse operation type
+            ["__op"] = "AddUnique",
             ["objects"] = encodedObjects
         };
     }

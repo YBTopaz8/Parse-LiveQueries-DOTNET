@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
 using Parse.Abstractions.Infrastructure;
 using Parse.Abstractions.Infrastructure.Control;
 using Parse.Infrastructure.Data;
@@ -10,12 +8,13 @@ namespace Parse.Infrastructure.Control;
 
 public class ParseSetOperation : IParseFieldOperation
 {
+    public object Value { get; private set; }
+
     public ParseSetOperation(object value)
     {
         Value = value;
     }
 
-    // Replace Encode with ConvertToJSON
     public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = default)
     {
         if (serviceHub == null)
@@ -23,15 +22,9 @@ public class ParseSetOperation : IParseFieldOperation
             throw new InvalidOperationException("ServiceHub is required to encode the value.");
         }
 
+        // Just let the encoder do its job
         var encodedValue = PointerOrLocalIdEncoder.Instance.Encode(Value, serviceHub);
 
-        // For simple values, return them directly (avoid unnecessary __op)
-        if (Value != null && (Value.GetType().IsPrimitive || Value is string))
-        {
-            return new Dictionary<string, object> { ["value"] = Value };
-        }
-
-        // If the encoded value is a dictionary, return it directly
         if (encodedValue is IDictionary<string, object> dictionary)
         {
             return dictionary;
@@ -39,40 +32,31 @@ public class ParseSetOperation : IParseFieldOperation
 
         if (Value is null)
         {
-            throw new ArgumentNullException($"{Value?.GetType()?.FullName}");
+            throw new ArgumentNullException(nameof(Value));
         }
-        // Default behavior for unsupported types
-        throw new ArgumentException($"Unsupported type for encoding: {Value?.GetType()?.FullName}");
+
+        // Fallback for primitive types/strings to avoid nesting
+        return new Dictionary<string, object> { ["value"] = Value };
     }
 
     public IParseFieldOperation MergeWithPrevious(IParseFieldOperation previous)
     {
-        // Set operation always overrides previous operations
-        return this;
+        return this; // Set always overrides
     }
 
     public object Apply(object oldValue, string key)
     {
-        // Set operation always sets the field to the specified value
         return Value;
     }
+
     public object ConvertValueToJSON(IServiceHub serviceHub = null)
     {
-        // Get the values of the dictionary
-        var vals = ConvertToJSON(serviceHub).Values;
-
-
-
-        // Check if vals is a ValueCollection and contains exactly one element , that's how we get operations working! because they are dict<string,obj> of dict<string,obj>
-        if (vals.Count == 1)
+        if (serviceHub == null)
         {
-            // Return the first and only value
-            return vals.FirstOrDefault();
+            throw new InvalidOperationException("ServiceHub is required.");
         }
 
-        // Return vals if no single value is found
-        return vals;
+        // Standard Parse behavior: return the direct encoded value
+        return PointerOrLocalIdEncoder.Instance.Encode(Value, serviceHub);
     }
-
-    public object Value { get; private set; }
 }

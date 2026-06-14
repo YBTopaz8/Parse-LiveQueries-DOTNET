@@ -43,7 +43,30 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <summary>
     /// The <see cref="ParseClient"/> instance being targeted. This should generally not be set except when an object is being constructed, as otherwise race conditions may occur. The preferred method to set this property is via calling <see cref="Bind(IServiceHub)"/>.
     /// </summary>
-    public IServiceHub Services { get; set; }
+    private IServiceHub _services;
+
+    /// <summary>
+    /// The <see cref="ParseClient"/> instance being targeted.
+    /// </summary>
+    public IServiceHub Services
+    {
+        get
+        {
+            // Self-healing: If it ever becomes null, grab the global instance
+            if (_services == null && ParseClient.Instance != null)
+            {
+                _services = ParseClient.Instance.Services;
+            }
+
+            if (_services == null)
+            {
+                throw new InvalidOperationException("ParseClient.Instance.Services is null. Ensure ParseClient is initialized before interacting with ParseObjects.");
+            }
+
+            return _services;
+        }
+        set => _services = value;
+    }
 
     /// <summary>
     /// Constructs a new ParseObject with no data in it. A ParseObject constructed in this way will
@@ -64,12 +87,13 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         CreatingPointer.Value = false;
 
         // Validate serviceHub
-        if (serviceHub == null && ParseClient.Instance == null)
+        if (ParseClient.Instance == null)
         {
-            throw new InvalidOperationException("A valid IServiceHub or ParseClient.Instance must be available to construct a ParseObject.");
+            throw new InvalidOperationException("A valid ParseClient.Instance must be available to construct a ParseObject.");
         }
 
-        Services = serviceHub ?? ParseClient.Instance.Services;
+        serviceHub = ParseClient.Instance.Services;
+        Services = serviceHub;
 
         // Validate and set className
         if (string.IsNullOrWhiteSpace(className))
@@ -166,7 +190,16 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <returns>The instance which was mutated.</returns>
     public ParseObject Bind(IServiceHub serviceHub)
     {
-        return (Instance: this, Services = serviceHub).Instance;
+        if (serviceHub != null)
+        {
+            Services = serviceHub;
+        }
+        else if (Services == null)
+        {
+            Services = ParseClient.Instance?.Services;
+        }
+
+        return this;
     }
 
     /// <summary>

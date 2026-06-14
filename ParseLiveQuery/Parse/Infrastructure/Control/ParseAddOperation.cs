@@ -49,10 +49,12 @@ public class ParseAddOperation : IParseFieldOperation
         return result;
     }
 
+
     public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = default)
     {
-        // Convert the data into JSON-compatible structures
-        var encodedObjects = Data.Select(EncodeForParse).ToList();
+        // Use your centralized encoder instead of duplicating logic!
+        var encoder = PointerOrLocalIdEncoder.Instance;
+        var encodedObjects = Data.Select(obj => encoder.Encode(obj, serviceHub)).ToList();
 
         return new Dictionary<string, object>
         {
@@ -60,7 +62,6 @@ public class ParseAddOperation : IParseFieldOperation
             ["objects"] = encodedObjects
         };
     }
-
     private object EncodeForParse(object obj)
     {
         return obj switch

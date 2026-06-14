@@ -14,7 +14,7 @@
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageProjectUrl>https://github.com/YBTopaz8/parse-live-query-dotnet</PackageProjectUrl>
     <PackageReadmFile>Readme.md</PackageReadmFile>
-    <Version>3.6.2</Version>
+    <Version>3.7.0</Version>
   </PropertyGroup>
   <PropertyGroup>
     <PackageReleaseNotes>See detailed release notes in ReleaseNotes.md</PackageReleaseNotes>

@@ -102,9 +102,17 @@ public class Subscription<T> : Subscription where T : ParseObject
 
     internal override void DidReceive(object queryObj, Event objEvent, ParseObject obj, ParseObject? OriginalObject=null)
     {
-        
 
-        var typedObj = (T)obj;
+        T typedObj = obj as T;
+        if (typedObj == null && obj != null)
+        {
+            throw new InvalidOperationException(
+                $"LiveQuery encountered a casting error. Ensure you have registered the subclass '{typeof(T).Name}' " +
+                $"with the Parse SDK (e.g., ParseClient.Instance.RegisterSubclass(typeof({typeof(T).Name}))) " +
+                $"before subscribing to LiveQueries."
+            );
+        }
+
         T typedOG = null;
         if(OriginalObject is not null)
         {
