@@ -201,20 +201,34 @@ public class ParseCommandRunner : IParseCommandRunner
                 }
             }
 
+            // Browsers block custom headers that are not explicitly whitelisted on the server.
+            // We evaluate if we are running in WebAssembly (Wasm) either at compile-time or runtime.
+
+            bool isBrowser = false;
+#if BROWSER || __WASM__ || WASM
+        isBrowser = true;
+#else
+            // Safe .NET 6+ runtime check. Evaluates to true inside OpenSilver / Blazor WebAssembly.
+            isBrowser = System.OperatingSystem.IsBrowser();
+#endif
             // Add versioning headers if metadata is available
-            if (!string.IsNullOrEmpty(MetadataController.HostManifestData.Version))
+            // Only add telemetry versioning headers if we are running natively (iOS, Android, Windows Desktop)
+            if (!isBrowser)
             {
-                newCommand.Headers.Add(new KeyValuePair<string, string>("X-Parse-App-Build-Version", MetadataController.HostManifestData.Version));
-            }
+                if (!string.IsNullOrEmpty(MetadataController.HostManifestData.Version))
+                {
+                    newCommand.Headers.Add(new KeyValuePair<string, string>("X-Parse-App-Build-Version", MetadataController.HostManifestData.Version));
+                }
 
-            if (!string.IsNullOrEmpty(MetadataController.HostManifestData.ShortVersion))
-            {
-                newCommand.Headers.Add(new KeyValuePair<string, string>("X-Parse-App-Display-Version", MetadataController.HostManifestData.ShortVersion));
-            }
+                if (!string.IsNullOrEmpty(MetadataController.HostManifestData.ShortVersion))
+                {
+                    newCommand.Headers.Add(new KeyValuePair<string, string>("X-Parse-App-Display-Version", MetadataController.HostManifestData.ShortVersion));
+                }
 
-            if (!string.IsNullOrEmpty(MetadataController.EnvironmentData.OSVersion))
-            {
-                newCommand.Headers.Add(new KeyValuePair<string, string>("X-Parse-OS-Version", MetadataController.EnvironmentData.OSVersion));
+                if (!string.IsNullOrEmpty(MetadataController.EnvironmentData.OSVersion))
+                {
+                    newCommand.Headers.Add(new KeyValuePair<string, string>("X-Parse-OS-Version", MetadataController.EnvironmentData.OSVersion));
+                }
             }
 
             // Add master key or windows key
@@ -224,7 +238,9 @@ public class ParseCommandRunner : IParseCommandRunner
             }
             else
             {
-                newCommand.Headers.Add(new KeyValuePair<string, string>("X-Parse-Windows-Key", ServerConnectionData.Key));
+                string keyHeader = isBrowser ? "X-Parse-Client-Key" : "X-Parse-Windows-Key";
+
+                newCommand.Headers.Add(new KeyValuePair<string, string>(keyHeader, ServerConnectionData.Key));
             }
 
             // Add revocable session header if enabled

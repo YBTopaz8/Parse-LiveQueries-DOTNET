@@ -1,25 +1,15 @@
 ﻿
-# v3.6.1: Fixed OnUpdate() was returning null for new object
-## What's Changed
-- Fixed an issue where OnUpdate would only push the orginal values while updated values where null
+# v3.7.0 Key Highlights & Enhancements
+1. Deep Serialization & Recursive Encoding Fixes (Core)
 
-# v3.6.0: Added WASM Support, Refined Subscription Management ✨
+Recursive Set-Operation Serialization: Fixed a silent bug in `ParseSetOperation` and `ParseDataEncoder` where complex objects (like ParseACL or nested Pointers) assigned via standard C# properties were serialized as raw C# objects rather than JSON-compliant dictionaries.
 
-## What's Changed
-- Added Support for WASM Projects by skipping attempts to keep the websocket alive in browsers.
+Property-Level ACL & Pointer Security: Developers can now use standard, strongly-typed C# property setters (e.g., `object.ACL = myAcl` ) instead of dictionary-based `.Set()` fallbacks. The SDK now safely recursively converts and serializes these properties, preventing unexpected "Master Key Only" saves on the server.
 
-- Fixed Support for Subscription.Event.Update in the .On() extension method.
-It was not handled previously at all
+Optimized Array Operations: Streamlined `ParseAddOperation` and `ParseAddUniqueOperation` to leverage the centralized `PointerOrLocalIdEncoder`, eliminating duplicate serialization logic and improving type support.
 
-- Using Subscription.Event.Update) in .On() will ensure you are provided the Updated parse object,
+2. LiveQuery Resiliency & Cast Protections (Rx)
 
-If you need to have the original and the updated parse object, you can still subscribe to OnUpdate() like this
-``` 
-liveQuerySubscription.OnUpdate((originalObj,UpdatedObj) =>
-{
-// logic goes here
-});
-```
+Automatic Subclass Fallbacks: Fixed an `InvalidCastException` inside LiveQuery subscriptions when processing incoming events for custom subclasses. If a developer forgets to register a subclass globally, the Subscription<T> will now gracefully construct the type T using the received object state rather than crashing.
 
-- Did some better renaming to objects/variables
-
+Automatic Network State Recovery: Simplified WebSocket subscription lifetimes during network drops. The LiveQuery client now manages background reconnects natively without requiring developers to manually tear down and re-attach UI event listeners upon internet restoration.

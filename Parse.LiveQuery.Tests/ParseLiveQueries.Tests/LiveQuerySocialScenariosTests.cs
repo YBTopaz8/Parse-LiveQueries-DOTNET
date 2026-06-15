@@ -58,8 +58,8 @@ public class LiveQuerySocialScenariosTests
 
         clientA.Start();
 
-        callbackA.OnOpen().Wait();
-        callbackA.OnMessage("{\"op\":\"connected\"}").Wait();
+        callbackA.OnOpenAsync().Wait();
+        callbackA.OnMessageAsync("{\"op\":\"connected\"}").Wait();
     }
 
     [TestCleanup]
@@ -81,14 +81,14 @@ public class LiveQuerySocialScenariosTests
         ParseObject receivedRequest = null;
         var requestSubscription = clientA.Subscribe(friendRequestQuery);
         requestSubscription.On(Subscription.Event.Create, (obj, q) => receivedRequest = obj);
-        await callbackA.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
+        await callbackA.OnMessageAsync("{\"op\":\"subscribed\",\"requestId\":1}");
 
         // 2. User A subscribes to new GroupChats they are a member of.
         var groupChatQuery = new ParseQuery<ParseObject>(serviceHub, "GroupChat").WhereEqualTo("members", userA);
         ParseObject newGroupChat = null;
         var groupSubscription = clientA.Subscribe(groupChatQuery);
         groupSubscription.On(Subscription.Event.Create, (obj, q) => newGroupChat = obj);
-        await callbackA.OnMessage("{\"op\":\"subscribed\",\"requestId\":2}");
+        await callbackA.OnMessageAsync("{\"op\":\"subscribed\",\"requestId\":2}");
 
         // 3. User A sets up a combined, throttled subscription for new messages in ALL of their chats.
         //    This is an advanced Rx.NET test!
@@ -104,12 +104,12 @@ public class LiveQuerySocialScenariosTests
             {
                 receivedMessages.AddRange(batch);
             });
-        await callbackA.OnMessage("{\"op\":\"subscribed\",\"requestId\":3}");
+        await callbackA.OnMessageAsync("{\"op\":\"subscribed\",\"requestId\":3}");
 
 
         // ===== ACT 1: User B sends a friend request =====
         var serverMsg_FriendRequest = "{\"op\":\"create\",\"requestId\":1,\"object\":{\"className\":\"FriendRequest\",\"objectId\":\"req123\",\"sender\":{\"__type\":\"Pointer\",\"className\":\"_User\",\"objectId\":\"userB_id\"}}}";
-        await callbackA.OnMessage(serverMsg_FriendRequest);
+        await callbackA.OnMessageAsync(serverMsg_FriendRequest);
 
         // ===== ASSERT 1: User A receives the friend request =====
         Assert.IsNotNull(receivedRequest, "User A should have received the friend request via LiveQuery.");
@@ -119,7 +119,7 @@ public class LiveQuerySocialScenariosTests
         // ===== ACT 2: User A "accepts" the request (simulated Cloud Function call) =====
         // The server would create a new GroupChat and notify User A.
         var serverMsg_NewGroupChat = "{\"op\":\"create\",\"requestId\":2,\"object\":{\"className\":\"GroupChat\",\"objectId\":\"group456\",\"members\":[{\"__type\":\"Pointer\",\"className\":\"_User\",\"objectId\":\"userA_id\"},{\"__type\":\"Pointer\",\"className\":\"_User\",\"objectId\":\"userB_id\"}]}}";
-        await callbackA.OnMessage(serverMsg_NewGroupChat);
+        await callbackA.OnMessageAsync(serverMsg_NewGroupChat);
 
         // ===== ASSERT 2: User A receives the new group chat =====
         Assert.IsNotNull(newGroupChat, "User A should have been notified of the new group chat.");
@@ -128,7 +128,7 @@ public class LiveQuerySocialScenariosTests
 
         // ===== ACT 3: User B sends the first message to the new group chat =====
         var serverMsg_FirstMessage = "{\"op\":\"create\",\"requestId\":3,\"object\":{\"className\":\"TestChat\",\"objectId\":\"msg789\",\"text\":\"Hey, we're friends now!\",\"parentChat\":{\"__type\":\"Pointer\",\"className\":\"GroupChat\",\"objectId\":\"group456\"}}}";
-        await callbackA.OnMessage(serverMsg_FirstMessage);
+        await callbackA.OnMessageAsync(serverMsg_FirstMessage);
 
         // Give the Buffer/Throttle time to work
         await Task.Delay(1100);

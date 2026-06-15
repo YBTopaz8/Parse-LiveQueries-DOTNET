@@ -45,8 +45,8 @@ public class LiveQueryIntegrationScenariosTests
         client = new ParseLiveQueryClient(new Uri("ws://localhost/"), mockWebSocketFactory.Object, new SubscriptionFactory(), new SynchronousTaskQueue());
 
         client.Start();
-        webSocketCallback.OnOpen().Wait();
-        webSocketCallback.OnMessage("{\"op\":\"connected\"}").Wait();
+        webSocketCallback.OnOpenAsync().Wait();
+        webSocketCallback.OnMessageAsync("{\"op\":\"connected\"}").Wait();
     }
 
     [TestCleanup]
@@ -64,11 +64,11 @@ public class LiveQueryIntegrationScenariosTests
         TestChat receivedMessage = new();
         var subscription = client.Subscribe(chatQuery);
         subscription.On(Subscription.Event.Create, (obj) => receivedMessage = obj);
-        await webSocketCallback.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
+        await webSocketCallback.OnMessageAsync("{\"op\":\"subscribed\",\"requestId\":1}");
 
         // ACT
         var serverMessage = "{\"op\":\"create\",\"requestId\":1,\"object\":{\"className\":\"TestChat\",\"objectId\":\"msg123\",\"Msg\":\"Hello!\"}}";
-        await webSocketCallback.OnMessage(serverMessage);
+        await webSocketCallback.OnMessageAsync(serverMessage);
 
 
         // ASSERT
@@ -86,11 +86,11 @@ public class LiveQueryIntegrationScenariosTests
         TestChat updatedMessage = new();
         var subscription = client.Subscribe(chatQuery);
         subscription.On(Subscription.Event.Update, (obj, q) => updatedMessage = obj);
-        await webSocketCallback.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
+        await webSocketCallback.OnMessageAsync("{\"op\":\"subscribed\",\"requestId\":1}");
 
         // ACT
         var serverMessage = "{\"op\":\"update\",\"requestId\":1,\"object\":{\"className\":\"TestChat\",\"objectId\":\"msg123\",\"Msg\":\"Updated message!\"}}";
-        await webSocketCallback.OnMessage(serverMessage);
+        await webSocketCallback.OnMessageAsync(serverMessage);
 
         // ASSERT
         Assert.IsNotNull(updatedMessage, "An updated message should have been received.");
@@ -107,11 +107,11 @@ public class LiveQueryIntegrationScenariosTests
         TestChat deletedMessage = new();
         var subscription = client.Subscribe(chatQuery);
         subscription.On(Subscription.Event.Delete, (obj) => deletedMessage = obj);
-        await webSocketCallback.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
+        await webSocketCallback.OnMessageAsync("{\"op\":\"subscribed\",\"requestId\":1}");
 
         // ACT
         var serverMessage = "{\"op\":\"delete\",\"requestId\":1,\"object\":{\"className\":\"TestChat\",\"objectId\":\"msg123\"}}";
-        await webSocketCallback.OnMessage(serverMessage);
+        await webSocketCallback.OnMessageAsync(serverMessage);
 
         // ASSERT
         Assert.IsNotNull(deletedMessage, "A delete event should have been received.");
@@ -130,11 +130,11 @@ public class LiveQueryIntegrationScenariosTests
 
         var subscription = client.Subscribe(requestQuery);
         subscription.On(Subscription.Event.Create, (obj, q) => receivedRequest = obj);
-        await webSocketCallback.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
+        await webSocketCallback.OnMessageAsync("{\"op\":\"subscribed\",\"requestId\":1}");
 
         // ACT
         var serverMessage = "{\"op\":\"create\",\"requestId\":1,\"object\":{\"className\":\"FriendRequest\",\"objectId\":\"req123\",\"sender\":{\"__type\":\"Pointer\",\"className\":\"_User\",\"objectId\":\"otherUser_id\"}}}";
-        await webSocketCallback.OnMessage(serverMessage);
+        await webSocketCallback.OnMessageAsync(serverMessage);
 
         // ASSERT
         Assert.IsNotNull(receivedRequest, "A friend request should have been received.");
@@ -154,11 +154,11 @@ public class LiveQueryIntegrationScenariosTests
 
         var subscription = client.Subscribe(playerStateQuery);
         subscription.On(Subscription.Event.Update, (obj, q) => updatedState = obj);
-        await webSocketCallback.OnMessage("{\"op\":\"subscribed\",\"requestId\":1}");
+        await webSocketCallback.OnMessageAsync("{\"op\":\"subscribed\",\"requestId\":1}");
 
         // ACT: The desktop app plays the next song.
         var serverMessage = "{\"op\":\"update\",\"requestId\":1,\"object\":{\"className\":\"PlayerState\",\"objectId\":\"playerState_abc\",\"currentTrack\":\"New Song Title\",\"isPlaying\":true}}";
-        await webSocketCallback.OnMessage(serverMessage);
+        await webSocketCallback.OnMessageAsync(serverMessage);
 
         // ASSERT
         Assert.IsNotNull(updatedState, "The player state should have been updated.");

@@ -1,10 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Parse.LiveQuery.Tests.ParseLiveQueries.Tests;
+
 /// <summary>
 /// An implementation of ITaskQueue that executes tasks immediately and synchronously.
 /// This is essential for making unit tests deterministic and predictable, removing
@@ -17,22 +15,35 @@ internal class SynchronousTaskQueue : ITaskQueue
         try
         {
             taskStart();
+            return Task.CompletedTask;
         }
         catch (Exception ex)
         {
             return Task.FromException(ex);
         }
-        return Task.CompletedTask;
     }
 
-    public Task EnqueueOnSuccess<TIn>(Task<TIn> task, Func<Task<TIn>, Task> onSuccess)
+    public async Task EnqueueOnSuccess<TIn>(Func<Task<TIn>> taskFactory, Func<Task<TIn>, Task> onSuccess)
     {
-        // In a synchronous test, we assume the input task is already completed.
-        if (task.IsFaulted || task.IsCanceled)
+        Task<TIn> task;
+
+        try
         {
-            return task;
+            // 1. Execute the factory to start the task
+            task = taskFactory();
+
+            // 2. Await the task synchronously in the queue
+            await task.ConfigureAwait(false);
         }
-        return onSuccess(task);
+        catch
+        {
+            // If the factory throws, or the task faults/cancels, we skip the onSuccess callback.
+            // We rethrow so the unit test catches the failure and fails appropriately.
+            throw;
+        }
+
+        // 3. If we reach here, the task succeeded. Execute the success callback!
+        await onSuccess(task).ConfigureAwait(false);
     }
 
     public Task EnqueueOnError(Task task, Action<Exception> onError)
@@ -46,6 +57,7 @@ internal class SynchronousTaskQueue : ITaskQueue
                 onError(exceptionToReport);
             }
         }
+
         return Task.CompletedTask;
     }
 }
