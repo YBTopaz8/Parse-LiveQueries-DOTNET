@@ -29,17 +29,35 @@ if (Connectivity.NetworkAccess != NetworkAccess.Internet)
 }
 
 // Init ParseClient
-var client = new ParseClient(new ServerConnectionData
-{
-    ApplicationID = "YOUR_APP_ID",
-    ServerURI = new Uri("YOUR_SERVER_URL"),
-    Key = "YOUR_CLIENT_KEY" // or MasterKey
-}, new HostManifestData
-{
-    Version = "1.0.0",
-    Identifier = "com.yourcompany.yourmauiapp",
-    Name = "MyMauiApp"
-});
+
+
+    var serverData = new ServerConnectionData
+    {
+        ApplicationID = "YOUR_APP_ID",
+        ServerURI = new Uri("YOUR_SERVER_URL"),
+    };
+
+    bool isBrowser = false;
+
+#if BROWSER || __WASM__ || WASM
+isBrowser = true;
+#else
+    // Safe .NET 6+ runtime check. Evaluates to true inside OpenSilver / Blazor WebAssembly Projects
+    isBrowser = System.OperatingSystem.IsBrowser();
+#endif
+    if (isBrowser)
+    {
+        serverData.Key = YOUR_CLIENT_KEY;
+    }
+    else
+    {
+        serverData.Key = YOUR_DOTNET_KEY;
+    }
+
+
+    // Create ParseClient
+    ParseClient client = new ParseClient(serverData);
+    
 
 client.Publicize(); // Access via ParseClient.Instance globally
 ```
