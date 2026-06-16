@@ -46,7 +46,26 @@ public static class Conversion
     {
         if (value is T || value == null)
             return value;
+        if (typeof(T).IsEnum)
+        {
+            // 1. If stored as a string (e.g. "Web")
+            if (value is string stringValue && Enum.TryParse(typeof(T), stringValue, true, out var enumValue))
+            {
+                return enumValue;
+            }
 
+            // 2. If stored as a number (e.g. 3)
+            try
+            {
+                var underlyingType = Enum.GetUnderlyingType(typeof(T));
+                var numericValue = Convert.ChangeType(value, underlyingType);
+                return Enum.ToObject(typeof(T), numericValue);
+            }
+            catch
+            {
+                // Fall back to standard flow if parsing fails
+            }
+        }
         if (typeof(T).IsPrimitive)
         {
             // Special case for JSON deserialized strings that represent numbers

@@ -1089,7 +1089,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
 
             if (!ParseDataEncoder.Validate(value))
             {
-                throw new ArgumentException("Invalid type for value: " + value.GetType().ToString());
+                throw new ArgumentException("Invalid type for valusse: " + value.GetType().ToString());
             }
 
             PerformOperation(key, new ParseSetOperation(value));

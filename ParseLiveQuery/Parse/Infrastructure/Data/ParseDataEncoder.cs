@@ -42,6 +42,7 @@ public abstract class ParseDataEncoder
             value is Guid ||
             value is Uri ||
             value is Array ||
+            value is DateTimeOffset ||
             Conversion.As<IDictionary<string, object>>(value) is { } ||
             Conversion.As<IDictionary<string, string>>(value) is { } ||
             Conversion.As<IDictionary<string, bool>>(value) is { } ||
@@ -65,7 +66,7 @@ public abstract class ParseDataEncoder
             _ when value.GetType().IsPrimitive || value is string => value,
             // DateTime encoding
             DateTime date => EncodeDate(date),
-
+            DateTimeOffset datetimeOff => EncodeDateTimeOffSet(datetimeOff),
             // Byte array encoding
             byte[] bytes => EncodeBytes(bytes),
             Uri uri => uri.ToString(),
@@ -116,6 +117,15 @@ public abstract class ParseDataEncoder
         };
     }
 
+    
+    /// <summary>
+    /// Encodes a DateTimeOffset into a JSON-compatible structure.
+    /// Converts it to UTC first to prevent timezone shifts during serialization.
+    /// </summary>
+    private static IDictionary<string, object> EncodeDateTimeOffSet(DateTimeOffset date)
+    {
+        return EncodeDate(date.UtcDateTime);
+    }
     /// <summary>
     /// Encodes a byte array into a JSON-compatible structure.
     /// </summary>
@@ -195,7 +205,9 @@ public abstract class ParseDataEncoder
 
             if (!Validate(item))
             {
-                throw new ArgumentException($"Invalid type for value in list: {item?.GetType().FullName}");
+                Debug.WriteLine("sss");
+                Console.WriteLine("console sss");
+                throw new ArgumentException($"Invalids type for value in list: {item?.GetType().FullName}");
             }
 
             encoded.Add(Encode(item, serviceHub));
