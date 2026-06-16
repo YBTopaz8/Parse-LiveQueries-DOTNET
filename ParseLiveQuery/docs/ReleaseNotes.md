@@ -1,15 +1,20 @@
 ﻿
-# v3.7.0 Key Highlights & Enhancements
-1. Deep Serialization & Recursive Encoding Fixes (Core)
+# v3.7.1 Key Highlights & Enhancements
+1. WebAssembly (WASM) & Browser Compatibility (CORS Fixes)
+WASM Preflight Header Filtering: Prevented the SDK from automatically appending custom metadata headers (`X-Parse-App-Build-Version`, `X-Parse-App-Display-Version`, and `X-Parse-OS-Version`) when running in a browser environment. Added compile-time preprocessor checks and a native .NET runtime OperatingSystem.IsBrowser() check. This resolves the browser-level CORS blocking error (`TypeError: NetworkError`).
 
-Recursive Set-Operation Serialization: Fixed a silent bug in `ParseSetOperation` and `ParseDataEncoder` where complex objects (like ParseACL or nested Pointers) assigned via standard C# properties were serialized as raw C# objects rather than JSON-compliant dictionaries.
+Modernized Client Key Header Routing: Replaced the legacy `X-Parse-Windows-Key` (a fossil from Windows Phone 8 days) with the standard, CORS-approved `X-Parse-Client-Key` header when compiling/running in a WebAssembly context.
 
-Property-Level ACL & Pointer Security: Developers can now use standard, strongly-typed C# property setters (e.g., `object.ACL = myAcl` ) instead of dictionary-based `.Set()` fallbacks. The SDK now safely recursively converts and serializes these properties, preventing unexpected "Master Key Only" saves on the server.
+    Note for WASM devs: When initializing ParseClient in Wasm, simply supply your standard Parse Client Key (iOS/Android key) instead of the legacy .NET Key.
 
-Optimized Array Operations: Streamlined `ParseAddOperation` and `ParseAddUniqueOperation` to leverage the centralized `PointerOrLocalIdEncoder`, eliminating duplicate serialization logic and improving type support.
+2. Type System & Serialization Upgrades
 
-2. LiveQuery Resiliency & Cast Protections (Rx)
+    - Native C# Enum Support: Upgraded the core `Conversion.cs` deserialization engine to natively support C# Enums. The SDK now automatically converts database strings (e.g., "Web") or integers (e.g., 3) back into their strongly-typed C# Enums on read. 
+    Developers no longer need to write custom getters/setters or `.ToString()` wrappers in their Parse models.
 
-Automatic Subclass Fallbacks: Fixed an `InvalidCastException` inside LiveQuery subscriptions when processing incoming events for custom subclasses. If a developer forgets to register a subclass globally, the Subscription<T> will now gracefully construct the type T using the received object state rather than crashing.
+    - Native DateTimeOffset Support: Added native validation and serialization support for DateTimeOffset inside `ParseDataEncoder.cs`. 
+    The SDK now automatically converts `DateTimeOffset` to UTC DateTime and formats it as a standard Parse ISO 8601 Date object ( { "__type": "Date", "iso": "..." }) before sending it to the Parse Server, eliminating timezone-shifting bugs.
 
-Automatic Network State Recovery: Simplified WebSocket subscription lifetimes during network drops. The LiveQuery client now manages background reconnects natively without requiring developers to manually tear down and re-attach UI event listeners upon internet restoration.
+3. Under-the-Hood Cleanup
+
+    StreamReader Double-Dispose Protection: Patched internal stream reading processes to ensure that stream readers use the `leaveOpen: true` flag. This prevents unmanaged underlying network and IO streams from being closed prematurely during cancellation, resolving a silent handle-corruption bug on physical platform channels.
