@@ -31,7 +31,8 @@ public abstract class ParseDataEncoder
     {
         return value is null ||
             value.GetType().IsPrimitive ||
-            value is string ||
+            value is string || 
+            value is Enum ||
             value is ParseObject ||
             value is ParseACL ||
             value is ParseFile ||
@@ -62,6 +63,7 @@ public abstract class ParseDataEncoder
             return null;
         return value switch
         {
+            Enum enumValue => Convert.ToInt32(enumValue),
             // Primitive types or strings
             _ when value.GetType().IsPrimitive || value is string => value,
             // DateTime encoding

@@ -709,6 +709,9 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// requested type, or null if unsuccessful.</param>
     /// <returns>true if the lookup and conversion succeeded, otherwise
     /// false.</returns>
+    /// <summary>
+    /// Populates result with the value for the key, if possible.
+    /// </summary>
     public bool TryGetValue<T>(string key, out T result)
     {
         lock (Mutex)
@@ -717,7 +720,31 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
             {
                 try
                 {
-                    T temp = Conversion.To<T>(this[key]);
+                    object rawValue = this[key];
+
+                    // 1. Handle Nulls safely
+                    if (rawValue == null)
+                    {
+                        result = default;
+                        return true; // Key exists, value is legitimately null
+                    }
+
+                    Type targetType = typeof(T);
+                    Type underlyingType = Nullable.GetUnderlyingType(targetType);
+
+                    // 2. Handle Enums (and Nullable Enums)
+                    if (targetType.IsEnum || (underlyingType != null && underlyingType.IsEnum))
+                    {
+                        Type enumType = underlyingType ?? targetType;
+
+                        // Parse Server usually returns numbers as Int64 (long) or Int32 (int).
+                        // Enum.ToObject converts that raw number back into specific Enum.
+                        result = (T)Enum.ToObject(enumType, Convert.ToInt64(rawValue));
+                        return true;
+                    }
+
+                    // 3. Handle standard conversions for everything else
+                    T temp = Conversion.To<T>(rawValue);
                     result = temp;
                     return true;
                 }
@@ -732,7 +759,6 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
             return false;
         }
     }
-
     #endregion
 
     #region Delete Object
