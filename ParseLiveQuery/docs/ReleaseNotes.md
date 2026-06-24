@@ -1,5 +1,5 @@
 ﻿
-# v3.7.1 Key Highlights & Enhancements
+# v3.7.2 Key Highlights & Enhancements
 1. WebAssembly (WASM) & Browser Compatibility (CORS Fixes)
 WASM Preflight Header Filtering: Prevented the SDK from automatically appending custom metadata headers (`X-Parse-App-Build-Version`, `X-Parse-App-Display-Version`, and `X-Parse-OS-Version`) when running in a browser environment. Added compile-time preprocessor checks and a native .NET runtime OperatingSystem.IsBrowser() check. This resolves the browser-level CORS blocking error (`TypeError: NetworkError`).
 
