@@ -67,31 +67,93 @@ public class ParseObjectController : IParseObjectController
     }
 
 
-    public async Task<IEnumerable<Task<IObjectState>>> SaveAllAsync(IEnumerable<IObjectState> states,IEnumerable<IDictionary<string, IParseFieldOperation>> operationsList,string sessionToken,IServiceHub serviceHub,CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<IObjectState>> SaveAllAsync(
+      IEnumerable<IObjectState> states,
+      IEnumerable<IDictionary<string, IParseFieldOperation>> operationsList,
+      string sessionToken,
+      IServiceHub serviceHub,
+      CancellationToken cancellationToken = default)
     {
-        // Create a list of tasks where each task represents a command to be executed
-        var tasks =
-            states.Zip(operationsList, (state, operations) => new ParseCommand(state.ObjectId == null? $"classes/{Uri.EscapeDataString(state.ClassName)}": $"classes/{Uri.EscapeDataString(state.ClassName)}/{Uri.EscapeDataString(state.ObjectId)}",
-            method: state.ObjectId == null ? "POST" : "PUT",sessionToken: sessionToken,data: serviceHub.GenerateJSONObjectForSaving(operations)))
-        .Select(command => CommandRunner.RunCommandAsync(command,null,null, cancellationToken)) // Run commands asynchronously
-        .ToList();
+        var statesList = states.ToList();
+        var opsList = operationsList.ToList();
 
-        // Wait for all tasks to complete
-        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
-        var decodedStates = results.Select(result => ParseObjectCoder.Instance.Decode(result.Item2, Decoder, serviceHub)).ToList();
-        // Decode results and return a list of tasks that resolve to IObjectState
-        return results.Select(result =>
-            Task.FromResult(ParseObjectCoder.Instance.Decode(result.Item2, Decoder, serviceHub)) // Return a task that resolves to IObjectState
-        ).ToList();
+        if (statesList.Count == 0)
+        {
+            return Enumerable.Empty<IObjectState>();
+        }
+
+        // 1. Build the individual batch command payloads (POST for new, PUT for updates)
+        var requests = statesList.Zip(opsList, (state, operations) =>
+        {
+            var isNew = state.ObjectId == null;
+            var path = isNew
+                ? $"classes/{Uri.EscapeDataString(state.ClassName)}"
+                : $"classes/{Uri.EscapeDataString(state.ClassName)}/{Uri.EscapeDataString(state.ObjectId)}";
+
+            return new ParseCommand(
+                path,
+                method: isNew ? "POST" : "PUT",
+                sessionToken: sessionToken,
+                data: serviceHub.GenerateJSONObjectForSaving(operations)
+            );
+        }).ToList();
+
+        // 2. Execute via the batch endpoint (/batch) to save network overhead
+        var batchTasks = ExecuteBatchRequests(requests, sessionToken, cancellationToken);
+        var batchResults = await Task.WhenAll(batchTasks).ConfigureAwait(false);
+
+        // 3. Decode the raw response dictionaries back into IObjectStates
+        var decodedStates = new List<IObjectState>();
+        for (int i = 0; i < statesList.Count; i++)
+        {
+            var resultDict = batchResults[i];
+            var decoded = ParseObjectCoder.Instance.Decode(resultDict, Decoder, serviceHub);
+
+            // Ensure the decoded state retains the class name and ID if the batch response omitted them
+            if (decoded.ClassName == null)
+            {
+                decoded = decoded.MutatedClone(mutable =>
+                {
+                    mutable.ClassName = statesList[i].ClassName;
+                    if (statesList[i].ObjectId != null)
+                    {
+                        mutable.ObjectId = statesList[i].ObjectId;
+                    }
+                });
+            }
+            decodedStates.Add(decoded);
+        }
+
+        return decodedStates;
     }
 
 
-
-
-    public Task DeleteAsync(IObjectState state, string sessionToken, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteAsync(IObjectState state, string sessionToken, CancellationToken cancellationToken = default)
     {
-        return CommandRunner.RunCommandAsync(new ParseCommand($"classes/{state.ClassName}/{state.ObjectId}", method: "DELETE", sessionToken: sessionToken, data: null), cancellationToken: cancellationToken);
+        if (state.ObjectId == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var command = new ParseCommand(
+                $"classes/{Uri.EscapeDataString(state.ClassName)}/{Uri.EscapeDataString(state.ObjectId)}",
+                method: "DELETE",
+                sessionToken: sessionToken,
+                data: null
+            );
+
+            await CommandRunner.RunCommandAsync(command, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (ParseFailureException ex) when (ex.Code == ParseFailureException.ErrorCode.ObjectNotFound)
+        {
+            // Object didn't exist on the server anyway; return false to indicate no deletion occurred
+            return false;
+        }
     }
+   
 
     public IEnumerable<Task> DeleteAllAsync(IEnumerable<IObjectState> states, string sessionToken, CancellationToken cancellationToken = default)
     {
