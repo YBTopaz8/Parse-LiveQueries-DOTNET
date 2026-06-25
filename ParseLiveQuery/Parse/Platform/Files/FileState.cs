@@ -8,7 +8,7 @@ public class FileState
 
     public string Name { get; set; }
 
-    public string MediaType { get; set; }
+    public string? MediaType { get; set; }
 
     public Uri Location { get; set; }
 

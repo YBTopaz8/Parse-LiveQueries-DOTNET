@@ -12,9 +12,9 @@ public interface IParseObjectController
 
     Task<IObjectState> SaveAsync(IObjectState state, IDictionary<string, IParseFieldOperation> operations, string sessionToken, IServiceHub serviceHub, CancellationToken cancellationToken = default);
 
-    Task<IEnumerable<Task<IObjectState>>> SaveAllAsync(IEnumerable<IObjectState> states, IEnumerable<IDictionary<string, IParseFieldOperation>> operationsList, string sessionToken, IServiceHub serviceHub, CancellationToken cancellationToken = default);
-
-    Task DeleteAsync(IObjectState state, string sessionToken, CancellationToken cancellationToken = default);
+  
 
     IEnumerable<Task> DeleteAllAsync(IEnumerable<IObjectState> states, string sessionToken, CancellationToken cancellationToken = default);
+    Task<IEnumerable<IObjectState>> SaveAllAsync(IEnumerable<IObjectState> states, IEnumerable<IDictionary<string, IParseFieldOperation>> operationsList, string sessionToken, IServiceHub serviceHub, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(IObjectState state, string sessionToken, CancellationToken cancellationToken = default);
 }

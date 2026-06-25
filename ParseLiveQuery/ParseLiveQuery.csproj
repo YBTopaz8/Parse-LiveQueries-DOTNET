@@ -5,7 +5,8 @@
     <RootNamespace>YB.Parse.LiveQuery</RootNamespace>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>latest</LangVersion>
-    <PackageId>YB.ParseLiveQueryDotNet</PackageId>    
+    <PackageId>YB.ParseLiveQueryDotNet</PackageId>
+	  <Nullable>enable</Nullable>
     <Authors>Yvan Brunel</Authors>
     <Company>Me</Company>
     <Description>A Modern .NET library for Parse Live Query. Compatible With .NET MAUI for Windows, Android, MacOS, iOS too, Now Smart Watches ;)</Description>

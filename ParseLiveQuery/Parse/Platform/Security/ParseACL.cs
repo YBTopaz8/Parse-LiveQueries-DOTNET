@@ -116,21 +116,15 @@ public class ParseACL : IJsonConvertible
 
     public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = default)
     {
-        Dictionary<string, object> result = new Dictionary<string, object>();
-        foreach (string user in readers.Union(writers))
-        {
-            Dictionary<string, object> userPermissions = new Dictionary<string, object>();
-            if (readers.Contains(user))
-            {
-                userPermissions["read"] = true;
+        return readers.Union(writers).ToDictionary(
+            user => user,
+            user => {
+                var userPermissions = new Dictionary<string, object>();
+                if (readers.Contains(user)) userPermissions["read"] = true;
+                if (writers.Contains(user)) userPermissions["write"] = true;
+                return (object)userPermissions;
             }
-            if (writers.Contains(user))
-            {
-                userPermissions["write"] = true;
-            }
-            result[user] = userPermissions;
-        }
-        return result;
+        );
     }
 
     private void SetAccess(AccessKind kind, string userId, bool allowed)

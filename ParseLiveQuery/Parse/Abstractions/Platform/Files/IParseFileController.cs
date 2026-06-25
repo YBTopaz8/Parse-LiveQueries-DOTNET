@@ -9,5 +9,5 @@ namespace Parse.Abstractions.Platform.Files;
 
 public interface IParseFileController
 {
-    Task<FileState> SaveAsync(FileState state, Stream dataStream, string sessionToken, IProgress<IDataTransferLevel> progress, CancellationToken cancellationToken);
+    Task<FileState> SaveAsync(FileState state, Stream dataStream, string sessionToken, IProgress<IDataTransferLevel>? progress, CancellationToken cancellationToken);
 }

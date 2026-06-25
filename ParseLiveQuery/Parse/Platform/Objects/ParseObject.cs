@@ -366,7 +366,19 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
             }
         }
     }
-
+    /// <summary>
+    /// Exposes a read-only view of this ParseObject's current estimated data fields.
+    /// </summary>
+    public IReadOnlyDictionary<string, object> EstimatedDataView
+    {
+        get
+        {
+            lock (Mutex)
+            {
+                return new System.Collections.ObjectModel.ReadOnlyDictionary<string, object>(EstimatedData);
+            }
+        }
+    }
     bool Dirty { get; set; }
 
     internal IDictionary<string, object> EstimatedData { get; } = new Dictionary<string, object> { };
@@ -531,6 +543,17 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     }
 
     /// <summary>
+    /// Gets a value for the key of a particular type, or a default value if the key is not found.
+    /// </summary>
+    public T GetOrDefault<T>(string key, T defaultValue = default)
+    {
+        lock (Mutex)
+        {
+            return TryGetValue(key, out T result) ? result : defaultValue;
+        }
+    }
+
+    /// <summary>
     /// Gets a value for the key of a particular type.
     /// <typeparam name="T">The type to convert the value to. Supported types are
     /// ParseObject and its descendents, Parse types such as ParseRelation and ParseGeopoint,
@@ -541,29 +564,18 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// </summary>
     public T Get<T>(string key)
     {
+        if (!ContainsKey(key))
+        {
+            throw new KeyNotFoundException($"The key '{key}' was not found in the object.");
+        }
 
         try
         {
-            // Try to get the value
-            if (!ContainsKey(key))
-            {
-                // If the key doesn't exist, throw a KeyNotFoundException
-                throw new KeyNotFoundException($"The key '{key}' was not found in the object.");
-            }
-            // If the key exists, attempt to convert the value
             return Conversion.To<T>(this[key]);
-        }
-        catch (KeyNotFoundException)
-        {
-
-            // Handle missing key explicitly - better than a NullReferenceException
-            throw; // Rethrow the KeyNotFoundException
         }
         catch (Exception ex)
         {
-
-            // Optionally to catch other exceptions or rethrow a more specific exception
-            throw new InvalidCastException($"Error converting value for key '{key}'", ex);
+            throw new InvalidCastException($"Error converting value for key '{key}' to type {typeof(T).Name}", ex);
         }
     }
 
@@ -712,8 +724,13 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <summary>
     /// Populates result with the value for the key, if possible.
     /// </summary>
-    public bool TryGetValue<T>(string key, out T result)
+    public bool TryGetValue<T>(string? key, out T? result)
     {
+        if(string.IsNullOrEmpty(key))
+        {
+            result = default; 
+            return false;
+        }
         lock (Mutex)
         {
             if (ContainsKey(key))
@@ -730,7 +747,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
                     }
 
                     Type targetType = typeof(T);
-                    Type underlyingType = Nullable.GetUnderlyingType(targetType);
+                    Type? underlyingType = Nullable.GetUnderlyingType(targetType);
 
                     // 2. Handle Enums (and Nullable Enums)
                     if (targetType.IsEnum || (underlyingType != null && underlyingType.IsEnum))
@@ -767,25 +784,32 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// Deletes this object on the server.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
-    public Task DeleteAsync(CancellationToken cancellationToken = default)
+    /// <returns>True if the object was deleted; false if it was not found or already deleted.</returns>
+    public Task<bool> DeleteAsync(CancellationToken cancellationToken = default)
     {
         return TaskQueue.Enqueue(async toAwait =>
         {
-            await DeleteAsyncInternal(cancellationToken).ConfigureAwait(false);
-            return toAwait;  // Ensure the task is returned to the queue
+            var result = await DeleteAsyncInternal(cancellationToken).ConfigureAwait(false);
+            return result;  // Returns the boolean success flag through the queue
         }, cancellationToken);
     }
 
-    internal async Task DeleteAsyncInternal(CancellationToken cancellationToken)
+    internal async Task<bool> DeleteAsyncInternal(CancellationToken cancellationToken)
     {
         if (ObjectId == null)
         {
-            return; // No need to delete if the object doesn't have an ID
+            return false; // No need to delete if the object has no server ID
         }
 
         var sessionToken = await Services.GetCurrentSessionToken();
-        await Services.ObjectController.DeleteAsync(State, sessionToken, cancellationToken).ConfigureAwait(false);
-        IsDirty = true;
+        bool deleted = await Services.ObjectController.DeleteAsync(State, sessionToken, cancellationToken).ConfigureAwait(false);
+
+        if (deleted)
+        {
+            IsDirty = true;
+        }
+
+        return deleted;
     }
 
 
@@ -1186,9 +1210,9 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <param name="defaultValue">The value to return if the property is not present on the ParseObject.</param>
     /// <param name="propertyName">The name of the property.</param>
     /// <typeparam name="T">The return type of the property.</typeparam>
-    protected T GetProperty<T>(T defaultValue, [CallerMemberName] string propertyName = null)
+    protected T? GetProperty<T>(T? defaultValue, [CallerMemberName] string? propertyName = null)
     {
-        return TryGetValue(Services.GetFieldForPropertyName(ClassName, propertyName), out T result) ? result : defaultValue;
+        return TryGetValue(Services.GetFieldForPropertyName(ClassName, propertyName), out T? result) ? result : defaultValue;
     }
 
     /// <summary>
@@ -1197,9 +1221,9 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <returns>The ParseRelation for the property.</returns>
     /// <param name="propertyName">The name of the property.</param>
     /// <typeparam name="T">The ParseObject subclass type of the ParseRelation.</typeparam>
-    protected ParseRelation<T> GetRelationProperty<T>([CallerMemberName] string propertyName = null) where T : ParseObject
+    protected ParseRelation<T?> GetRelationProperty<T>([CallerMemberName] string? propertyName = null) where T : ParseObject
     {
-        return GetRelation<T>(Services.GetFieldForPropertyName(ClassName, propertyName));
+        return GetRelation<T?>(Services.GetFieldForPropertyName(ClassName, propertyName));
     }
 
     /// <summary>

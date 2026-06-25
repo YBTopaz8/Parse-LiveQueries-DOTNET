@@ -11,6 +11,27 @@ namespace Parse;
 [ParseClassName("_User")]
 public class ParseUser : ParseObject
 {
+    /// <summary>
+    /// Gets whether this user is currently authenticated on this client.
+    /// </summary>
+    public bool IsAuthenticated
+    {
+        get
+        {
+            lock (Mutex)
+            {
+                // If there's no session token, the user is definitely not authenticated
+                if (SessionToken == null)
+                    return false;
+
+                // Check if this instance matches the in-memory cached current user
+                var cachedCurrentUser = Services.CurrentUserController.CurrentUser;
+                return cachedCurrentUser != null && cachedCurrentUser.ObjectId == ObjectId;
+            }
+        }
+    }
+
+    [Obsolete("Please use IsAuthenticated property instead for synchronous, faster check")]
     public async Task<bool> IsAuthenticatedAsync()
     {
         // Early exit if SessionToken is null
@@ -34,7 +55,6 @@ public class ParseUser : ParseObject
             return false;
         }
     }
-
     public static ParseUser CurrentUser
     {
         get => ParseClient.Instance.CurrentUser;
@@ -58,7 +78,7 @@ public class ParseUser : ParseObject
         MutateState(mutableClone => mutableClone.ServerData.Remove("password"));
     }
 
-    public string SessionToken => State.ContainsKey("sessionToken") ? State["sessionToken"] as string : null;
+    public string? SessionToken => State.ContainsKey("sessionToken") ? State["sessionToken"] as string : null;
 
 
     internal async Task SetSessionTokenAsync(string newSessionToken, CancellationToken cancellationToken = default)
@@ -68,21 +88,21 @@ public class ParseUser : ParseObject
     }
 
     [ParseFieldName("username")]
-    public string Username
+    public string? Username
     {
         get => GetProperty<string>(null, nameof(Username));
         set => SetProperty(value, nameof(Username));
     }
 
     [ParseFieldName("password")]
-    public string Password
+    public string? Password
     {
         get => GetProperty<string>(null, nameof(Password));
         set => SetProperty(value, nameof(Password));
     }
 
     [ParseFieldName("email")]
-    public string Email
+    public string? Email
     {
         get => GetProperty<string>(null, nameof(Email));
         set => SetProperty(value, nameof(Email));
@@ -168,7 +188,9 @@ public class ParseUser : ParseObject
     internal async Task UpgradeToRevocableSessionAsync(CancellationToken cancellationToken = default)
     {
         var sessionToken = SessionToken;
+        if (string.IsNullOrEmpty(sessionToken)) throw new ArgumentNullException(nameof(sessionToken));
         var newSessionToken = await Services.UpgradeToRevocableSessionAsync(sessionToken, cancellationToken).ConfigureAwait(false);
+
         await SetSessionTokenAsync(newSessionToken, cancellationToken).ConfigureAwait(false);
     }
  

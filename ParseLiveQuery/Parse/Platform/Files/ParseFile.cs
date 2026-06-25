@@ -26,7 +26,7 @@ public static class FileServiceExtensions
     /// <param name="progress">The progress callback.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     public static async Task SaveFileAsync(this IServiceHub serviceHub,ParseFile file,
-        IProgress<IDataTransferLevel> progress,CancellationToken cancellationToken = default)
+        IProgress<IDataTransferLevel>? progress,CancellationToken cancellationToken = default)
     {
         var result = await file.TaskQueue.Enqueue(
             async toAwait => await serviceHub.FileController.SaveAsync(file.State,file.DataStream,
@@ -91,7 +91,7 @@ public class ParseFile : IJsonConvertible
 #pragma warning disable CS1030 // #warning directive
 #warning Make IServiceHub optionally null once all dependents are injecting it if necessary.
 
-    internal ParseFile(string name, Uri uri, string mimeType = null)
+    internal ParseFile(string name, Uri uri, string? mimeType = null)
     {
         State = new FileState
         {
@@ -111,7 +111,7 @@ public class ParseFile : IJsonConvertible
     /// <param name="data">The file's data.</param>
     /// <param name="mimeType">To specify the content-type used when uploading the
     /// file, provide this parameter.</param>
-    public ParseFile(string name, byte[] data, string mimeType = null) : this(name, new MemoryStream(data), mimeType) { }
+    public ParseFile(string name, byte[] data, string? mimeType = null) : this(name, new MemoryStream(data), mimeType) { }
 
     /// <summary>
     /// Creates a new file from a stream and a name.
@@ -122,7 +122,7 @@ public class ParseFile : IJsonConvertible
     /// <param name="data">The file's data.</param>
     /// <param name="mimeType">To specify the content-type used when uploading the
     /// file, provide this parameter.</param>
-    public ParseFile(string name, Stream data, string mimeType = null)
+    public ParseFile(string name, Stream data, string? mimeType = null)
     {
         State = new FileState
         {
