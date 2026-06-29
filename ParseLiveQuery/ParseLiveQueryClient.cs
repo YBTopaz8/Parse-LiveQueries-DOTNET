@@ -1,4 +1,5 @@
-﻿using Parse.Infrastructure;
+﻿using Parse.Abstractions.Infrastructure;
+using Parse.Infrastructure;
 using Parse.Infrastructure.Data;
 
 using System;
@@ -55,8 +56,12 @@ public class ParseLiveQueryClient :IAsyncDisposable
     public IObservable<(int requestId, Subscription subscription)> OnUnsubscribed => _unsubscribedSubject.AsObservable();
 
 
-    private ParseClient ParseClientInstance { get; set; }
-
+    private IServiceHub? _parseClientInstance;
+    public IServiceHub? ParseClientInstance
+    {
+        get => _parseClientInstance ??= ParseClient.Instance?.Services;
+        set => _parseClientInstance = value;
+    }
     public ParseLiveQueryClient() : this(GetDefaultUri()) { }
     public ParseLiveQueryClient(ParseClient client) : this(GetDefaultUri()) 
     {
@@ -234,15 +239,10 @@ public class ParseLiveQueryClient :IAsyncDisposable
         var subscriptionsToRemove = _subscriptions.Where(pair =>
             query.Equals(pair.Value.QueryObj) && (specificSubscription == null || specificSubscription.Equals(pair.Value))
         ).ToList();
-
         foreach (var pair in subscriptionsToRemove)
         {
-            
+           
             await SendUnsubscriptionAsync(pair.Value).ConfigureAwait(false);
-            if (_subscriptions.TryRemove(pair.Key, out var removedSubscription)&&!string.IsNullOrEmpty(removedSubscription.Name))
-            {
-                _namedSubscriptions.TryRemove(removedSubscription.Name, out _);
-            }
         }
     }
 
@@ -306,20 +306,18 @@ public class ParseLiveQueryClient :IAsyncDisposable
     }
 
 
-
     private Task SendOperationWithSessionAsync(Func<string, IClientOperation> operationFunc)
     {
-
         return _taskQueue.EnqueueOnSuccess<string>(
-
-            () => ParseClient.Instance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClient.Instance.Services, CancellationToken.None),
-
+           
+            () => ParseClientInstance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClientInstance, CancellationToken.None),
             async currentSessionTokenTask =>
             {
                 string sessionToken = await currentSessionTokenTask.ConfigureAwait(false);
                 await SendOperationAsync(operationFunc(sessionToken)).ConfigureAwait(false);
             });
     }
+    
 
     private Task SendOperationAsync(IClientOperation operation)
     {  
@@ -490,7 +488,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
                 var objectData = JsonElementToDictionary(jsonElement);
 
-                var obj = ParseClient.Instance.Decoder.Decode(objectData, ParseClientInstance);
+                var obj = ParseClientInstance.Decoder.Decode(objectData, ParseClientInstance);
 
                 if (jsonObject.TryGetValue("original", out var message))
                 
