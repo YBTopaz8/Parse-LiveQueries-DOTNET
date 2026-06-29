@@ -18,40 +18,42 @@ internal class ParseObjectClass
         PropertyMappings = type.GetProperties()
             .Select(property => (Property: property, FieldNameAttribute: property.GetCustomAttribute<ParseFieldNameAttribute>(true)))
             .Where(set => set.FieldNameAttribute is { })
-            .ToDictionary(set => set.Property.Name, set => set.FieldNameAttribute.FieldName);
+            .ToDictionary(set => set.Property.Name, set => set.FieldNameAttribute?.FieldName);
     }
 
     public TypeInfo TypeInfo { get; }
 
     public string DeclaredName { get; }
 
-    public IDictionary<string, string> PropertyMappings { get; }
+    public IDictionary<string, string>? PropertyMappings { get; }
 
-    public ParseObject Instantiate()
+    public ParseObject? Instantiate()
     {
-        var parameters = Constructor.GetParameters();
+        var parameters = Constructor?.GetParameters();
         
-        if (parameters.Length == 0)
+        if (parameters?.Length == 0)
         {            
             
             // Parameterless constructor
-            return Constructor.Invoke(null) as ParseObject;
+            return Constructor?.Invoke(null) as ParseObject;
         }
-        else if (parameters.Length == 2 &&
+        else if (parameters?.Length == 2 &&
                  parameters[0].ParameterType == typeof(string) &&
                  parameters[1].ParameterType == typeof(Parse.Abstractions.Infrastructure.IServiceHub))
         {
-         
 
+            string className = Constructor?.DeclaringType?.GetParseClassName()
+                   ?? Constructor?.DeclaringType?.Name
+                   ?? ParseObject.AutoClassName;
             // Two-parameter constructor
-            string className = Constructor.DeclaringType?.Name ?? "_User"; //Still Unsure about this default value, maybe User is not the best choice, but what else?
-            var serviceHub = Parse.ParseClient.Instance.Services;
-            return Constructor.Invoke(new object[] { className, serviceHub }) as ParseObject;
+          
+            var serviceHub = ParseClient.Instance.Services;
+            return Constructor?.Invoke(new object[] { className, serviceHub }) as ParseObject;
         }
         
 
         throw new InvalidOperationException("Unsupported constructor signature.");
     }
 
-    ConstructorInfo Constructor { get; }
+    ConstructorInfo? Constructor { get; }
 }

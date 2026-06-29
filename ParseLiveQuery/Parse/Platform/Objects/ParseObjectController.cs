@@ -79,7 +79,7 @@ public class ParseObjectController : IParseObjectController
 
         if (statesList.Count == 0)
         {
-            return Enumerable.Empty<IObjectState>();
+            return [];
         }
 
         // 1. Build the individual batch command payloads (POST for new, PUT for updates)

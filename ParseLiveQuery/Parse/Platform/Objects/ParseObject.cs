@@ -43,12 +43,12 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <summary>
     /// The <see cref="ParseClient"/> instance being targeted. This should generally not be set except when an object is being constructed, as otherwise race conditions may occur. The preferred method to set this property is via calling <see cref="Bind(IServiceHub)"/>.
     /// </summary>
-    private IServiceHub _services;
+    private IServiceHub? _services;
 
     /// <summary>
     /// The <see cref="ParseClient"/> instance being targeted.
     /// </summary>
-    public IServiceHub Services
+    public IServiceHub? Services
     {
         get
         {
@@ -79,7 +79,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// </remarks>
     /// <param name="className">The className for this ParseObject.</param>
     /// <param name="serviceHub">The <see cref="IServiceHub"/> implementation instance to target for any resources. This paramater can be effectively set after construction via <see cref="Bind(IServiceHub)"/>.</param>
-    public ParseObject(string className, IServiceHub serviceHub = default)
+    public ParseObject(string className, IServiceHub? serviceHub = default)
     {
         //Switched to AsyncLocal to avoid thread safety issues
 
@@ -91,8 +91,13 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         {
             throw new InvalidOperationException("A valid ParseClient.Instance must be available to construct a ParseObject.");
         }
+        serviceHub ??= ParseClient.Instance?.Services;
 
-        serviceHub = ParseClient.Instance.Services;
+        if (serviceHub == null)
+        {
+            throw new InvalidOperationException("A valid serviceHub or ParseClient.Instance must be available to construct a ParseObject.");
+        }
+
         Services = serviceHub;
 
         // Validate and set className
@@ -164,7 +169,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
 
 
 
-    internal ParseObject(IObjectState state, IServiceHub serviceHub = default)
+    internal ParseObject(IObjectState state, IServiceHub? serviceHub = default)
     {
         Services = serviceHub ?? ParseClient.Instance.Services;
 
@@ -181,7 +186,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <summary>
     /// Constructor for use in ParseObject subclasses. Subclasses must specify a ParseClassName attribute. Subclasses that do not implement a constructor accepting <see cref="IServiceHub"/> will need to be bond to an implementation instance via <see cref="Bind(IServiceHub)"/> after construction.
     /// </summary>
-    protected ParseObject(IServiceHub serviceHub = default) : this(AutoClassName, serviceHub) { }
+    protected ParseObject(IServiceHub? serviceHub = default) : this(AutoClassName, serviceHub) { }
 
     /// <summary>
     /// Attaches the given <see cref="IServiceHub"/> implementation instance to this <see cref="ParseObject"/> or <see cref="ParseObject"/>-derived class instance.
@@ -205,7 +210,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <summary>
     /// Occurs when a property value changes.
     /// </summary>
-    public event PropertyChangedEventHandler PropertyChanged
+    public event PropertyChangedEventHandler? PropertyChanged
     {
         add
         {
@@ -1406,14 +1411,14 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// refreshing or saving.
     /// </summary>
     /// <returns>Map of objectId to ParseObject which have been fetched.</returns>
-    IDictionary<string, ParseObject> CollectFetchedObjects()
+    IDictionary<string, ParseObject>? CollectFetchedObjects()
     {
-        return Services.TraverseObjectDeep(EstimatedData).OfType<ParseObject>().Where(o => o.ObjectId != null && o.IsDataAvailable).GroupBy(o => o.ObjectId).ToDictionary(group => group.Key, group => group.Last());
+        return Services?.TraverseObjectDeep(EstimatedData).OfType<ParseObject>().Where(o => o.ObjectId != null && o.IsDataAvailable).GroupBy(o => o.ObjectId).ToDictionary(group => group.Key, group => group.Last());
     }
 
-    IEnumerable<ParseObject> FindUnsavedChildren()
+    IEnumerable<ParseObject>? FindUnsavedChildren()
     {
-        return Services.TraverseObjectDeep(EstimatedData).OfType<ParseObject>().Where(o => o.IsDirty);
+        return Services?.TraverseObjectDeep(EstimatedData).OfType<ParseObject>().Where(o => o.IsDirty);
     }
 
     IEnumerator<KeyValuePair<string, object>> IEnumerable<KeyValuePair<string, object>>.GetEnumerator()
@@ -1442,5 +1447,39 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
             MutateState(mutableClone => mutableClone.ObjectId = objectId);
             OnPropertyChanged(nameof(ObjectId));
         }
+    }
+    /// <summary>
+    /// Fetches this object with the data from the server, while simultaneously including nested relational ParseObjects.
+    /// </summary>
+    /// <param name="keys">The relational pointer keys to include.</param>
+    public Task<ParseObject> FetchWithIncludeAsync(params string[] keys)
+    {
+        return FetchWithIncludeAsync(CancellationToken.None, keys);
+    }
+
+    /// <summary>
+    /// Fetches this object with the data from the server, while simultaneously including nested relational ParseObjects.
+    /// </summary>
+    public Task<ParseObject> FetchWithIncludeAsync(CancellationToken cancellationToken, params string[] keys)
+    {
+        return TaskQueue.Enqueue(async toAwait =>
+        {
+            await toAwait.ConfigureAwait(false);
+
+            if (ObjectId == null)
+                throw new InvalidOperationException("Cannot fetch an object that hasn't been saved to the server.");
+
+            var query = new ParseQuery<ParseObject>(Services, ClassName).WhereEqualTo("objectId", ObjectId);
+            foreach (var key in keys)
+            {
+                query = query.Include(key);
+            }
+
+            var result = await query.FirstAsync(cancellationToken).ConfigureAwait(false);
+            MergeFromObject(result);
+            Fetched = true;
+
+            return this;
+        }, cancellationToken);
     }
 }
