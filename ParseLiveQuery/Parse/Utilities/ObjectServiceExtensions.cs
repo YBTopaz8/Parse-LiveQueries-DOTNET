@@ -487,14 +487,15 @@ public static class ObjectServiceExtensions
 
             try
             {
-                // Await SaveAllAsync to get the collection of Task<IObjectState>
-                var saveTasks = await serviceHub.ObjectController.SaveAllAsync(states, operationsList, sessionToken, serviceHub, cancellationToken).ConfigureAwait(false);
+                // 1. Await SaveAllAsync to get the actual states (No more nested tasks!)
+                var savedStates = await serviceHub.ObjectController.SaveAllAsync(
+                    states, operationsList, sessionToken, serviceHub, cancellationToken
+                ).ConfigureAwait(false);
 
-                // Await individual tasks in the result
-                foreach (var (item, stateTask) in current.Zip(saveTasks, (item, stateTask) => (item, stateTask)))
+
+                foreach (var (item, state) in current.Zip(savedStates, (item, state) => (item, state)))
                 {
-                    var state = await stateTask.ConfigureAwait(false); // Await the Task<IObjectState>
-                    item.HandleSave(state); // Now state is IObjectState
+                    item.HandleSave(state);
                 }
             }
             catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException)
