@@ -12,4 +12,8 @@ public interface IParseQueryController
     Task<int> CountAsync<T>(ParseQuery<T> query, ParseUser user, CancellationToken cancellationToken = default) where T : ParseObject;
 
     Task<IObjectState> FirstAsync<T>(ParseQuery<T> query, ParseUser user, CancellationToken cancellationToken = default) where T : ParseObject;
+
+
+    Task<IEnumerable<IDictionary<string, object>>?> AggregateAsync<T>(ParseQuery<T> query, IList<object> pipeline, ParseUser user, CancellationToken cancellationToken = default) where T : ParseObject;
+    Task<IEnumerable<TResult>?> DistinctAsync<T, TResult>(ParseQuery<T> query, string key, ParseUser user, CancellationToken cancellationToken = default) where T : ParseObject;
 }
