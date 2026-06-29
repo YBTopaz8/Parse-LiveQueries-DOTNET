@@ -40,8 +40,8 @@ public class UniversalWebClient : IWebClient
     BCLWebClient Client { get; set; }
     public async Task<Tuple<HttpStatusCode, string>> ExecuteAsync(
     WebRequest httpRequest,
-    IProgress<IDataTransferLevel> uploadProgress,
-    IProgress<IDataTransferLevel> downloadProgress,
+    IProgress<IDataTransferLevel>? uploadProgress,
+    IProgress<IDataTransferLevel>? downloadProgress,
     CancellationToken cancellationToken)
     {
         uploadProgress ??= new Progress<IDataTransferLevel> { };
@@ -62,7 +62,7 @@ public class UniversalWebClient : IWebClient
             {
                 if (ContentHeaders.Contains(header.Key))
                 {
-                    message.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                    message.Content?.Headers.TryAddWithoutValidation(header.Key, header.Value);
                 }
                 else
                 {
@@ -92,10 +92,10 @@ public class UniversalWebClient : IWebClient
         long readSoFar = 0;
 
         
-        while ((bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
+        while ((bytesRead = await responseStream.ReadAsync(buffer, cancellationToken)) > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await resultStream.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
+            await resultStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
             readSoFar += bytesRead;
 
             

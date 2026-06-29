@@ -20,7 +20,7 @@ public class WebRequest
     /// <summary>
     /// Data stream to be uploaded.
     /// </summary>
-    public virtual Stream Data { get; set; }
+    public virtual Stream? Data { get; set; }
 
     /// <summary>
     /// HTTP method. One of <c>DELETE</c>, <c>GET</c>, <c>HEAD</c>, <c>POST</c> or <c>PUT</c>

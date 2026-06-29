@@ -14,9 +14,9 @@ namespace Parse.Infrastructure.Execution;
 /// </summary>
 public class ParseCommand : WebRequest
 {
-    public IDictionary<string, object> DataObject { get; private set; }
+    public IDictionary<string, object>? DataObject { get; private set; }
 
-    public override Stream Data
+    public override Stream? Data
     {
         get
         {
@@ -30,13 +30,13 @@ public class ParseCommand : WebRequest
         set => base.Data = value;
     }
 
-    public ParseCommand(string relativeUri, string method, string sessionToken = null, IList<KeyValuePair<string, string>> headers = null, IDictionary<string, object> data = null) : this(
+    public ParseCommand(string relativeUri, string method, string? sessionToken = null, IList<KeyValuePair<string, string>>? headers = null, IDictionary<string, object>? data = null) : this(
         relativeUri: relativeUri, method: method, sessionToken: sessionToken, headers: headers, stream: null, contentType: data != null ? "application/json" : null)
     {
         DataObject = data;
     }
 
-    public ParseCommand(string relativeUri, string method, string sessionToken = null, IList<KeyValuePair<string, string>> headers = null, Stream stream = null, string contentType = null)
+    public ParseCommand(string relativeUri, string method, string? sessionToken = null, IList<KeyValuePair<string, string>>? headers = null, Stream? stream = null, string? contentType = null)
     {
         Path = relativeUri;
         Method = method;

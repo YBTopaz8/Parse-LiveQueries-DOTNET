@@ -54,10 +54,10 @@ public class ParseCommandRunner : IParseCommandRunner
     /// <param name="downloadProgress">An <see cref="IProgress{ParseDownloadProgressEventArgs}"/> instance to push download progress data to.</param>
     /// <param name="cancellationToken">An asynchronous operation cancellation token that dictates if and when the operation should be cancelled.</param>
     /// <returns></returns>
-    public async Task<Tuple<HttpStatusCode, IDictionary<string, object>>> RunCommandAsync(
+    public async Task<Tuple<HttpStatusCode, IDictionary<string, object>>?> RunCommandAsync(
         ParseCommand command,
-        IProgress<IDataTransferLevel> uploadProgress = null,
-        IProgress<IDataTransferLevel> downloadProgress = null,
+        IProgress<IDataTransferLevel>? uploadProgress = null,
+        IProgress<IDataTransferLevel>? downloadProgress = null,
         CancellationToken cancellationToken = default)
     {
         // Prepare the command
@@ -70,7 +70,7 @@ public class ParseCommandRunner : IParseCommandRunner
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        IDictionary<string, object> contentJson = null;
+        IDictionary<string, object>? contentJson = null;
         // Extract response
         var statusCode = response.Item1;
          var content = response.Item2;
@@ -91,7 +91,7 @@ public class ParseCommandRunner : IParseCommandRunner
         }
         else if (responseCode == 400)
         {
-            ParseErrorPayload payload = null;
+            ParseErrorPayload? payload = null;
             try
             {
                 payload = JsonSerializer.Deserialize<ParseErrorPayload>(content);
@@ -169,7 +169,7 @@ public class ParseCommandRunner : IParseCommandRunner
 
 
         // Return successful response
-        return new Tuple<HttpStatusCode, IDictionary<string, object>>(statusCode, contentJson);
+        return new Tuple<HttpStatusCode, IDictionary<string, object?>>(statusCode, contentJson);
     }
 
     async Task<ParseCommand> PrepareCommand(ParseCommand command)
