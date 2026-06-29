@@ -61,13 +61,6 @@ public class LiveQuerySocialScenariosTests
         callbackA.OnOpenAsync().Wait();
         callbackA.OnMessageAsync("{\"op\":\"connected\"}").Wait();
     }
-
-    [TestCleanup]
-    public void TearDown()
-    {
-        _=(clientA?.DisposeAsync());
-    }
-
     [TestMethod]
     [Description("[Full Scenario] Tests the entire friend request, acceptance, and first message flow.")]
     public async Task FullSocialFlow_FriendRequestIsSentAndAccepted_FirstMessageIsReceived()
@@ -85,7 +78,7 @@ public class LiveQuerySocialScenariosTests
 
         // 2. User A subscribes to new GroupChats they are a member of.
         var groupChatQuery = new ParseQuery<ParseObject>(serviceHub, "GroupChat").WhereEqualTo("members", userA);
-        ParseObject newGroupChat = null;
+        ParseObject? newGroupChat = null;
         var groupSubscription = clientA.Subscribe(groupChatQuery);
         groupSubscription.On(Subscription.Event.Create, (obj, q) => newGroupChat = obj);
         await callbackA.OnMessageAsync("{\"op\":\"subscribed\",\"requestId\":2}");
@@ -137,4 +130,11 @@ public class LiveQuerySocialScenariosTests
         Assert.AreEqual(1, receivedMessages.Count, "User A should have received one new message.");
         Assert.AreEqual("msg789", receivedMessages[0].ObjectId);
     }
+    [TestCleanup]
+    public void TearDown()
+    {
+        _=(clientA?.DisposeAsync());
+    }
+
+    
 }
