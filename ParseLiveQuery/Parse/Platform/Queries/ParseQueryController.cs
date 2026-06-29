@@ -10,6 +10,7 @@ using Parse.Abstractions.Platform.Objects;
 using Parse.Abstractions.Platform.Queries;
 using Parse.Infrastructure.Data;
 using Parse.Infrastructure.Execution;
+using Parse.Infrastructure.Utilities;
 
 namespace Parse.Platform.Queries;
 
@@ -88,5 +89,48 @@ internal class ParseQueryController : IParseQueryController
 
         var response = await CommandRunner.RunCommandAsync(command, null,null,cancellationToken).ConfigureAwait(false);
         return response.Item2;
+    }
+
+    public async Task<IEnumerable<IDictionary<string, object>>?> AggregateAsync<T>(ParseQuery<T> query, IList<object> pipeline, ParseUser user, CancellationToken cancellationToken = default) where T : ParseObject
+    {
+        var parameters = query.BuildParameters();
+        // Remove standard find parameters that don't apply to pipelines
+        parameters.Remove("limit");
+        parameters.Remove("skip");
+        parameters.Remove("order");
+        parameters.Remove("keys");
+        parameters.Remove("include");
+
+        parameters["pipeline"] = pipeline;
+
+        var command = new ParseCommand(
+            $"aggregate/{Uri.EscapeDataString(query.ClassName)}?{ParseClient.BuildQueryString(parameters)}",
+            method: "GET",
+            sessionToken: user?.SessionToken,
+            data: null
+        );
+
+        var response = await CommandRunner.RunCommandAsync(command, null, null, cancellationToken).ConfigureAwait(false);
+        var rawResults = response.Item2.TryGetValue("results", out object? results) ? results as IList<object> : new List<object>();
+
+        return rawResults?.Select(r => Conversion.As<IDictionary<string, object>>(r));
+    }
+
+    public async Task<IEnumerable<TResult>?> DistinctAsync<T, TResult>(ParseQuery<T> query, string key, ParseUser? user, CancellationToken cancellationToken = default) where T : ParseObject
+    {
+        var parameters = query.BuildParameters();
+        parameters["distinct"] = key;
+
+        var command = new ParseCommand(
+            $"aggregate/{Uri.EscapeDataString(query.ClassName)}?{ParseClient.BuildQueryString(parameters)}",
+            method: "GET",
+            sessionToken: user?.SessionToken,
+            data: null
+        );
+
+        var response = await CommandRunner.RunCommandAsync(command, null, null, cancellationToken).ConfigureAwait(false);
+        var rawResults = response.Item2.TryGetValue("results", out object? results) ? results as IList<object> : new List<object>();
+
+        return rawResults?.Select(r => Conversion.To<TResult>(r));
     }
 }

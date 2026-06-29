@@ -9,6 +9,7 @@ using Parse.Abstractions.Infrastructure;
 using Parse.Infrastructure;
 using Parse.Infrastructure.Data;
 using Parse.Infrastructure.Utilities;
+using YB.Parse.LiveQuery.Parse.Utilities;
 
 namespace Parse;
 
@@ -81,7 +82,7 @@ public class ParseQuery<T> where T : ParseObject
     /// but the remaining values can be null if they won't be changed in this
     /// composition.
     /// </summary>
-    internal ParseQuery(ParseQuery<T> source, IDictionary<string, object> where = null, IEnumerable<string> replacementOrderBy = null, IEnumerable<string> thenBy = null, int? skip = null, int? limit = null, IEnumerable<string> includes = null, IEnumerable<string> selectedKeys = null, string redirectClassNameForKey = null)
+    internal ParseQuery(ParseQuery<T> source, IDictionary<string, object>? where = null, IEnumerable<string>? replacementOrderBy = null, IEnumerable<string>? thenBy = null, int? skip = null, int? limit = null, IEnumerable<string>? includes = null, IEnumerable<string>? selectedKeys = null, string? redirectClassNameForKey = null)
     {
         if (source == null)
         {
@@ -214,7 +215,7 @@ public class ParseQuery<T> where T : ParseObject
     /// all <see cref="ParseObject"/>s of the provided class.
     /// </summary>
     /// <param name="className">The name of the class to retrieve ParseObjects for.</param>
-    public ParseQuery(IServiceHub serviceHub, string className) => (ClassName, Services) = (className ?? throw new ArgumentNullException(nameof(className), "Must specify a ParseObject class name when creating a ParseQuery."), serviceHub);
+    public ParseQuery(IServiceHub? serviceHub, string className) => (ClassName, Services) = (className ?? throw new ArgumentNullException(nameof(className), "Must specify a ParseObject class name when creating a ParseQuery."), serviceHub);
 
     #region Order By
 
@@ -513,6 +514,30 @@ public class ParseQuery<T> where T : ParseObject
     }
 
     /// <summary>
+    /// Adds a constraint for finding string values that match a Full-Text Search.
+    /// This requires an active Text Index on the Parse/MongoDB server for the targeted keys.
+    /// </summary>
+    /// <param name="key">The key to search against.</param>
+    /// <param name="text">The text to search for.</param>
+    /// <returns>A new query with the additional constraint.</returns>
+    public ParseQuery<T> WhereFullTextMatches(string key, string text)
+    {
+        return new ParseQuery<T>(this, where: new Dictionary<string, object>
+    {
+        { key, new Dictionary<string, object>
+            {
+                { "$text", new Dictionary<string, object>
+                    {
+                        { "$search", new Dictionary<string, object> { { "$term", text } } }
+                    }
+                }
+            }
+        }
+    });
+    }
+
+
+    /// <summary>
     /// Adds a regular expression constraint for finding string values that match the provided
     /// regular expression. This may be slow for large data sets.
     /// </summary>
@@ -744,7 +769,7 @@ public class ParseQuery<T> where T : ParseObject
     /// Retrieves at most one ParseObject that satisfies this query.
     /// </summary>
     /// <returns>A single ParseObject that satisfies this query, or else null.</returns>
-    public Task<T> FirstOrDefaultAsync()
+    public Task<T?> FirstOrDefaultAsync()
     {
         return FirstOrDefaultAsync(CancellationToken.None);
     }
@@ -754,7 +779,7 @@ public class ParseQuery<T> where T : ParseObject
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A single ParseObject that satisfies this query, or else null.</returns>
-    public async Task<T> FirstOrDefaultAsync(CancellationToken cancellationToken)
+    public async Task<T?> FirstOrDefaultAsync(CancellationToken cancellationToken)
     {
         EnsureNotInstallationQuery();
         var result = await Services.QueryController.FirstAsync(this, await Services.GetCurrentUser(), cancellationToken).ConfigureAwait(false);
@@ -859,13 +884,31 @@ public class ParseQuery<T> where T : ParseObject
     {
         var query = new ParseQuery<T>(Services, ClassName)
             .WhereEqualTo(nameof(objectId), objectId)
-            .Limit(1);
-
-        var result = await query.FindAsync(cancellationToken).ConfigureAwait(false);
-        return result.FirstOrDefault() ?? throw new ParseFailureException(ParseFailureException.ErrorCode.ObjectNotFound, "Object with the given objectId not found.");
+            ;
+        return await query.FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false) ?? throw new ParseFailureException(ParseFailureException.ErrorCode.ObjectNotFound, "Object with the given objectId not found.");
     }
 
-    internal object GetConstraint(string key)
+    /// <summary>
+    /// Starts building a MongoDB Aggregation Pipeline for advanced data processing.
+    /// </summary>
+    public ParsePipelineBuilder<T> Aggregate()
+    {
+        EnsureNotInstallationQuery();
+        return new ParsePipelineBuilder<T>(this);
+    }
+
+    /// <summary>
+    /// Finds all unique values for a specific key/field matching the current query.
+    /// </summary>
+    public async Task<IEnumerable<TResult>> DistinctAsync<TResult>(string key, CancellationToken cancellationToken = default)
+    {
+
+        EnsureNotInstallationQuery();
+        return await Services.QueryController.DistinctAsync<T, TResult>(this, key, ParseUser.CurrentUser, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    internal object? GetConstraint(string key)
     {
         return Filters?.GetOrDefault(key, null);
     }
@@ -935,7 +978,7 @@ public class ParseQuery<T> where T : ParseObject
     /// </summary>
     /// <param name="obj">The object to compare with the current object.</param>
     /// <returns><c>true</c> if the specified object is equal to the current object; otherwise, <c>false</c></returns>
-    public override bool Equals(object obj)
+    public override bool Equals(object? obj)
     {
         return obj == null || !(obj is ParseQuery<T> other) ? false : Equals(ClassName, other.ClassName) && Filters.CollectionsEqual(other.Filters) && Orderings.CollectionsEqual(other.Orderings) && Includes.CollectionsEqual(other.Includes) && KeySelections.CollectionsEqual(other.KeySelections) && Equals(SkipAmount, other.SkipAmount) && Equals(LimitAmount, other.LimitAmount);
     }

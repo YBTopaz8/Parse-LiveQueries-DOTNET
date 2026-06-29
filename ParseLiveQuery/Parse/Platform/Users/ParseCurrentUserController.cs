@@ -25,7 +25,7 @@ public class ParseCurrentUserController : IParseCurrentUserController
     private readonly IParseDataDecoder Decoder;
 
     private readonly TaskQueue TaskQueue = new();
-    private ParseUser currentUser; // Nullable to explicitly handle absence of a user
+    private ParseUser? currentUser; // Nullable to explicitly handle absence of a user
 
     public ParseCurrentUserController(ICacheController storageController, IParseObjectClassController classController, IParseDataDecoder decoder)
     {
@@ -34,7 +34,7 @@ public class ParseCurrentUserController : IParseCurrentUserController
         Decoder = decoder ?? throw new ArgumentNullException(nameof(decoder));
     }
 
-    public ParseUser CurrentUser
+    public ParseUser? CurrentUser
     {
         get => currentUser;
         private set => currentUser = value; // Setter is private to ensure controlled modification
