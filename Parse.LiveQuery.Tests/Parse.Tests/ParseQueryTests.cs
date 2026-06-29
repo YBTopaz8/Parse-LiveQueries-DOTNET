@@ -218,5 +218,27 @@ public class ParseQueryTests
 
     }
 
+    [TestMethod]
+    [Description("Tests that WhereFullTextMatches correctly builds the nested $text and $search query.")]
+    public void WhereFullTextMatches_BuildsQueryCorrectly()
+    {
+        // Arrange & Act: Search for the term "dotnet" inside the "bio" field
+        var query = new ParseQuery<ParseObject>(MockHub.Object, "Profile")
+            .WhereFullTextMatches("bio", "dotnet");
 
+        var results = query.GetConstraint("bio") as IDictionary<string, object>;
+
+        // Assert: Verify the MongoDB nested structure
+        Assert.IsNotNull(results, "The constraint for 'bio' should not be null.");
+        Assert.IsTrue(results.ContainsKey("$text"), "The constraint must contain the '$text' operator.");
+
+        var textDict = results["$text"] as IDictionary<string, object>;
+        Assert.IsNotNull(textDict);
+        Assert.IsTrue(textDict.ContainsKey("$search"), "The '$text' block must contain the '$search' operator.");
+
+        var searchDict = textDict["$search"] as IDictionary<string, object>;
+        Assert.IsNotNull(searchDict);
+        Assert.IsTrue(searchDict.ContainsKey("$term"), "The '$search' block must contain the '$term' key.");
+        Assert.AreEqual("dotnet", searchDict["$term"], "The search term must match the input query.");
+    }
 }

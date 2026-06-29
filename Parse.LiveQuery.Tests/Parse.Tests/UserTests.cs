@@ -413,6 +413,7 @@ public class UserTests
     //}
 
     [TestMethod]
+    [Obsolete]
     [Description("Tests that IsAuthenticatedAsync returns false when there is no session token.")]
     public async Task IsAuthenticatedAsync_WhenNoSessionToken_ReturnsFalse()
     {

@@ -1,11 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Net;
-using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Parse.Abstractions.Infrastructure;
@@ -14,10 +6,19 @@ using Parse.Abstractions.Infrastructure.Data;
 using Parse.Abstractions.Infrastructure.Execution;
 using Parse.Abstractions.Internal;
 using Parse.Abstractions.Platform.Objects;
+using Parse.Abstractions.Platform.Queries;
 using Parse.Infrastructure;
 using Parse.Infrastructure.Control;
 using Parse.Infrastructure.Execution;
 using Parse.Platform.Objects;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Parse.Tests;
 
@@ -550,7 +551,7 @@ public class ObjectTests
 
         // Modify the mock to simulate a server response with ObjectId set after save
         mockController.Setup(ctrl =>
-                ctrl.SaveAsync(It.IsAny<IObjectState>(), It.IsAny<IDictionary<string, IParseFieldOperation>>(), null, It.IsAny<IServiceHub>(), It.IsAny<CancellationToken>()))
+                ctrl.SaveAsync(It.IsAny<IObjectState>(), It.IsAny<IDictionary<string, IParseFieldOperation>>(), It.IsAny<string>(), It.IsAny<IServiceHub>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IObjectState state, IDictionary<string, IParseFieldOperation> operations, string sessionToken, IServiceHub serviceHub, CancellationToken cancellationToken) =>
             {
                 var newState = state as MutableObjectState;
@@ -613,7 +614,8 @@ public class ObjectTests
         var obj2 = client.CreateObject("TestClass2");
 
         // Save the objects individually
-        await Task.WhenAll(obj1.SaveAsync(), obj2.SaveAsync());
+        await obj1.SaveAsync();
+        await obj2.SaveAsync();
 
         // Verify the objects have the correct IDs
         Assert.AreEqual("id-TestClass1", obj1.ObjectId); // Check obj1 ID
@@ -636,10 +638,8 @@ public class ObjectTests
     {
         // Mock the object controller
         var mockController = new Mock<IParseObjectController>();
-        mockController
-            .Setup(ctrl =>
-                ctrl.DeleteAsync(It.IsAny<IObjectState>(), null, It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+        mockController.Setup(ctrl => ctrl.DeleteAsync(It.IsAny<IObjectState>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(true);
 
         // Create a ParseClient with the mocked controller
         var serviceHub = new MutableServiceHub { ObjectController = mockController.Object };
@@ -664,10 +664,8 @@ public class ObjectTests
         var mockController = new Mock<IParseObjectController>();
 
         // Mock DeleteAsync for individual object deletes
-        mockController
-            .Setup(ctrl =>
-                ctrl.DeleteAsync(It.IsAny<IObjectState>(), null, It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+        mockController.Setup(ctrl => ctrl.DeleteAsync(It.IsAny<IObjectState>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+              .ReturnsAsync(true);
 
         // Create a ParseClient with the mocked controller
         var serviceHub = new MutableServiceHub { ObjectController = mockController.Object };
@@ -700,7 +698,7 @@ public class ObjectTests
         // Arrange
         var mockController = new Mock<IParseObjectController>();
         mockController.Setup(ctrl =>
-            ctrl.FetchAsync(It.IsAny<IObjectState>(), null, It.IsAny<IServiceHub>(), It.IsAny<CancellationToken>()))
+            ctrl.FetchAsync(It.IsAny<IObjectState>(), It.IsAny<string>(), It.IsAny<IServiceHub>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MutableObjectState
             {
                 ObjectId = "fetchedId",
@@ -1064,7 +1062,7 @@ public class ObjectTests
     [Description("Tests that ParseObjectClass correctly extract properties and fields.")]
     public void Constructor_ExtractsPropertiesCorrectly() // Mock difficulty: 1
     {
-        ConstructorInfo constructor = typeof(TestParseObject).GetConstructor(Type.EmptyTypes);
+        ConstructorInfo? constructor = typeof(TestParseObject).GetConstructor(Type.EmptyTypes);
         ParseObjectClass obj = new ParseObjectClass(typeof(TestParseObject), constructor);
         Assert.AreEqual("TestParseObject", obj.DeclaredName);
         Assert.IsTrue(obj.PropertyMappings.ContainsKey("Text2"));
@@ -1107,6 +1105,49 @@ public class ObjectTests
 
         // Assert
         Assert.IsNull(instance);
+    }
+
+    [TestMethod]
+    [Description("Tests that FetchWithIncludeAsync builds the correct query and populates pointers.")]
+    public async Task FetchWithIncludeAsync_FetchesObjectAndPopulatesPointers()
+    {
+        // Arrange
+        var mockController = new Mock<IParseQueryController>();
+        var hub = new MutableServiceHub { QueryController = mockController.Object };
+        var client = new ParseClient(new ServerConnectionData { Test = true }, hub);
+
+        // We simulate a pointer object that only has an ID
+        var order = client.CreateObjectWithoutData("Order", "order123");
+
+        // We mock the QueryController to catch the query FetchWithInclude creates
+        ParseQuery<ParseObject>? capturedQuery = null;
+        mockController.Setup(c => c.FirstAsync(It.IsAny<ParseQuery<ParseObject>>(), It.IsAny<ParseUser>(), It.IsAny<CancellationToken>()))
+            .Callback<ParseQuery<ParseObject>, ParseUser, CancellationToken>((q, u, t) => capturedQuery = q)
+            .ReturnsAsync(new MutableObjectState
+            {
+                ObjectId = "order123",
+                ClassName = "Order",
+                ServerData = new Dictionary<string, object>
+                {
+                    // Simulate the nested included object being returned from the server
+                    ["customer"] = client.CreateObjectWithoutData("Customer", "cust123")
+                }
+            });
+
+        // Act
+        await order.FetchWithIncludeAsync("customer");
+
+        // Assert
+        Assert.IsNotNull(capturedQuery, "FetchWithIncludeAsync should have executed a query.");
+
+        // Verify the query parameters that were automatically built
+        var queryParams = capturedQuery.BuildParameters();
+        Assert.IsTrue(queryParams.ContainsKey("include"));
+        Assert.AreEqual("customer", queryParams["include"], "The query should have included the 'customer' key.");
+
+        // Verify the object successfully merged the result
+        Assert.IsTrue(order.IsDataAvailable);
+        Assert.IsNotNull(order["customer"], "The customer pointer should be populated in the object.");
     }
 }
 
