@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -215,7 +216,10 @@ public class ParseQuery<T> where T : ParseObject
     /// all <see cref="ParseObject"/>s of the provided class.
     /// </summary>
     /// <param name="className">The name of the class to retrieve ParseObjects for.</param>
-    public ParseQuery(IServiceHub? serviceHub, string className) => (ClassName, Services) = (className ?? throw new ArgumentNullException(nameof(className), "Must specify a ParseObject class name when creating a ParseQuery."), serviceHub);
+    public ParseQuery(IServiceHub? serviceHub, string className)
+    {
+        (ClassName, Services) = (className ?? throw new ArgumentNullException(nameof(className), "Must specify a ParseObject class name when creating a ParseQuery."), serviceHub);
+    }
 
     #region Order By
 
@@ -745,6 +749,110 @@ public class ParseQuery<T> where T : ParseObject
 
     #endregion
 
+    #region Strongly-Typed Expression Overloads
+
+    public ParseQuery<T> WhereEqualTo<TProp>(Expression<Func<T, TProp>> keySelector, TProp value)
+    {
+        return WhereEqualTo(ExpressionHelper.GetParseFieldName(keySelector), value);
+    }
+
+    public ParseQuery<T> WhereNotEqualTo<TProp>(Expression<Func<T, TProp>> keySelector, TProp value)
+    {
+        return WhereNotEqualTo(ExpressionHelper.GetParseFieldName(keySelector), value);
+    }
+
+    public ParseQuery<T> WhereGreaterThan<TProp>(Expression<Func<T, TProp>> keySelector, TProp value)
+    {
+        return WhereGreaterThan(ExpressionHelper.GetParseFieldName(keySelector), value);
+    }
+
+    public ParseQuery<T> WhereGreaterThanOrEqualTo<TProp>(Expression<Func<T, TProp>> keySelector, TProp value)
+    {
+        return WhereGreaterThanOrEqualTo(ExpressionHelper.GetParseFieldName(keySelector), value);
+    }
+
+    public ParseQuery<T> WhereLessThan<TProp>(Expression<Func<T, TProp>> keySelector, TProp value)
+    {
+        return WhereLessThan(ExpressionHelper.GetParseFieldName(keySelector), value);
+    }
+
+    public ParseQuery<T> WhereLessThanOrEqualTo<TProp>(Expression<Func<T, TProp>> keySelector, TProp value)
+    {
+        return WhereLessThanOrEqualTo(ExpressionHelper.GetParseFieldName(keySelector), value);
+    }
+
+    public ParseQuery<T> WhereExists<TProp>(Expression<Func<T, TProp>> keySelector)
+    {
+        return WhereExists(ExpressionHelper.GetParseFieldName(keySelector));
+    }
+
+    public ParseQuery<T> WhereDoesNotExist<TProp>(Expression<Func<T, TProp>> keySelector)
+    {
+        return WhereDoesNotExist(ExpressionHelper.GetParseFieldName(keySelector));
+    }
+
+    public ParseQuery<T> WhereContainedIn<TProp>(Expression<Func<T, TProp>> keySelector, IEnumerable<TProp> values)
+    {
+        return WhereContainedIn(ExpressionHelper.GetParseFieldName(keySelector), values);
+    }
+
+    public ParseQuery<T> WhereNotContainedIn<TProp>(Expression<Func<T, TProp>> keySelector, IEnumerable<TProp> values)
+    {
+        return WhereNotContainedIn(ExpressionHelper.GetParseFieldName(keySelector), values);
+    }
+
+    public ParseQuery<T> WhereContains<TProp>(Expression<Func<T, TProp>> keySelector, string substring)
+    {
+        return WhereContains(ExpressionHelper.GetParseFieldName(keySelector), substring);
+    }
+
+    public ParseQuery<T> WhereStartsWith<TProp>(Expression<Func<T, TProp>> keySelector, string suffix)
+    {
+        return WhereStartsWith(ExpressionHelper.GetParseFieldName(keySelector), suffix);
+    }
+
+    public ParseQuery<T> WhereEndsWith<TProp>(Expression<Func<T, TProp>> keySelector, string suffix)
+    {
+        return WhereEndsWith(ExpressionHelper.GetParseFieldName(keySelector), suffix);
+    }
+
+    public ParseQuery<T> WhereSizeEqualTo<TProp>(Expression<Func<T, TProp>> keySelector, int size)
+    {
+        return WhereSizeEqualTo(ExpressionHelper.GetParseFieldName(keySelector), size);
+    }
+
+    public ParseQuery<T> Include<TProp>(Expression<Func<T, TProp>> keySelector)
+    {
+        return Include(ExpressionHelper.GetParseFieldName(keySelector));
+    }
+
+    public ParseQuery<T> Select<TProp>(Expression<Func<T, TProp>> keySelector)
+    {
+        return Select(ExpressionHelper.GetParseFieldName(keySelector));
+    }
+
+    public ParseQuery<T> OrderBy<TProp>(Expression<Func<T, TProp>> keySelector)
+    {
+        return OrderBy(ExpressionHelper.GetParseFieldName(keySelector));
+    }
+
+    public ParseQuery<T> OrderByDescending<TProp>(Expression<Func<T, TProp>> keySelector)
+    {
+        return OrderByDescending(ExpressionHelper.GetParseFieldName(keySelector));
+    }
+
+    public ParseQuery<T> ThenBy<TProp>(Expression<Func<T, TProp>> keySelector)
+    {
+        return ThenBy(ExpressionHelper.GetParseFieldName(keySelector));
+    }
+
+    public ParseQuery<T> ThenByDescending<TProp>(Expression<Func<T, TProp>> keySelector)
+    {
+        return ThenByDescending(ExpressionHelper.GetParseFieldName(keySelector));
+    }
+
+    #endregion
+
     /// <summary>
     /// Retrieves a list of ParseObjects that satisfy this query from Parse.
     /// </summary>
@@ -900,7 +1008,7 @@ public class ParseQuery<T> where T : ParseObject
     /// <summary>
     /// Finds all unique values for a specific key/field matching the current query.
     /// </summary>
-    public async Task<IEnumerable<TResult>> DistinctAsync<TResult>(string key, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<TResult>?> DistinctAsync<TResult>(string key, CancellationToken cancellationToken = default)
     {
 
         EnsureNotInstallationQuery();

@@ -23,7 +23,7 @@ public static class Conversion
     /// JSON deserialization can be safely assumed to be lists or dictionaries of
     /// objects.
     /// </summary>
-    public static T As<T>(object value) where T : class
+    public static T? As<T>(object? value) where T : class
     {
         return ConvertTo<T>(value) as T;
     }
@@ -38,11 +38,11 @@ public static class Conversion
     /// JSON deserialization can be safely assumed to be lists or dictionaries of
     /// objects.
     /// </summary>
-    public static T To<T>(object value)
+    public static T? To<T>(object? value)
     {
-        return (T) ConvertTo<T>(value);
+        return (T?) ConvertTo<T>(value);
     }
-    internal static object ConvertTo<T>(object value)
+    internal static object? ConvertTo<T>(object? value)
     {
         if (value is T || value == null)
             return value;
@@ -129,7 +129,7 @@ public static class Conversion
     /// </summary>
     static Dictionary<Tuple<Type, Type>, Type> InterfaceLookupCache { get; } = new Dictionary<Tuple<Type, Type>, Type>();
 
-    static Type GetInterfaceType(Type objType, Type genericInterfaceType)
+    static Type? GetInterfaceType(Type objType, Type genericInterfaceType)
     {
         Tuple<Type, Type> cacheKey = new Tuple<Type, Type>(objType, genericInterfaceType);
 
