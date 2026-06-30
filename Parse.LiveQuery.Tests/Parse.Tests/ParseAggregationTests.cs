@@ -126,4 +126,74 @@ public class ParseAggregationTests
         Assert.IsTrue(((Dictionary<string, object>)rawPipeline[1]).ContainsKey("$limit"));
         Assert.IsTrue(((Dictionary<string, object>)rawPipeline[2]).ContainsKey("$project"));
     }
+
+
+
+
+    // Make a dummy class to test the [ParseFieldName] mapping
+    [ParseClassName("AggTestClass")]
+    private class AggTestClass : ParseObject
+    {
+        [ParseFieldName("revenue")]
+        public double Revenue { get; set; }
+
+        [ParseFieldName("user_id")]
+        public string UserId { get; set; }
+
+        [ParseFieldName("is_active")]
+        public bool IsActive { get; set; }
+    }
+
+
+
+    [TestMethod]
+    [Description("Tests that the strongly-typed Group method resolves [ParseFieldName] correctly.")]
+    public void Aggregate_StronglyTypedGroup_GeneratesCorrectFieldNames()
+    {
+        var query = new ParseQuery<AggTestClass>(Client.Services, "AggTestClass");
+
+        // Act using the Expression lambda x => x.UserId
+        var builder = query.Aggregate()
+            .Group(x => x.UserId, ("TotalRevenue", ParseAccumulator.Sum, "revenue"));
+
+        // Extract the raw dictionary to verify the internal build
+        var pipelineField = typeof(ParsePipelineBuilder<AggTestClass>).GetField("_pipeline", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var rawPipeline = pipelineField.GetValue(builder) as List<object>;
+
+        var groupStage = (Dictionary<string, object>)rawPipeline[0];
+        var groupDict = (Dictionary<string, object?>)groupStage["$group"];
+
+        // Assert that x => x.UserId was correctly translated to "$user_id"
+        Assert.AreEqual("$user_id", groupDict["_id"], "The lambda expression should map to the [ParseFieldName] with a $ prefix.");
+    }
+
+    [TestMethod]
+    [Description("Tests that strongly-typed Project and Sort resolve [ParseFieldName] correctly.")]
+    public void Aggregate_StronglyTypedProjectAndSort_GeneratesCorrectFieldNames()
+    {
+        var query = new ParseQuery<AggTestClass>(Client.Services, "AggTestClass");
+
+        // Act using Expression lambdas
+        var builder = query.Aggregate()
+            .Project(x => x.UserId, x => x.IsActive)
+            .Sort(x => x.Revenue, descending: true);
+
+        // Extract the raw dictionary
+        var pipelineField = typeof(ParsePipelineBuilder<AggTestClass>).GetField("_pipeline", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var rawPipeline = pipelineField.GetValue(builder) as List<object>;
+
+        // 1. Verify Project
+        var projectStage = (Dictionary<string, object>)rawPipeline[0];
+        var projectDict = (Dictionary<string, object>)projectStage["$project"];
+
+        Assert.IsTrue(projectDict.ContainsKey("user_id"), "Project should resolve x.UserId to 'user_id'");
+        Assert.IsTrue(projectDict.ContainsKey("is_active"), "Project should resolve x.IsActive to 'is_active'");
+
+        // 2. Verify Sort
+        var sortStage = (Dictionary<string, object>)rawPipeline[1];
+        var sortDict = (Dictionary<string, object>)sortStage["$sort"];
+
+        Assert.IsTrue(sortDict.ContainsKey("revenue"), "Sort should resolve x.Revenue to 'revenue'");
+        Assert.AreEqual(-1, sortDict["revenue"], "Descending sort should equal -1");
+    }
 }

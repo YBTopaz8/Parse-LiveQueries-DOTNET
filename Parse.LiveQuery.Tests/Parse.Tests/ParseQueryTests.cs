@@ -1,3 +1,8 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
+using Parse.Abstractions.Infrastructure;
+using Parse.Infrastructure;
+using Parse.Infrastructure.Utilities;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -5,14 +10,6 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-
-using Moq;
-
-using Parse.Abstractions.Infrastructure;
-
-using Parse.Infrastructure;
 
 namespace Parse.Tests;
 
@@ -240,5 +237,51 @@ public class ParseQueryTests
         Assert.IsNotNull(searchDict);
         Assert.IsTrue(searchDict.ContainsKey("$term"), "The '$search' block must contain the '$term' key.");
         Assert.AreEqual("dotnet", searchDict["$term"], "The search term must match the input query.");
+    }
+
+    [ParseClassName("ComplexObject")]
+    public class ComplexObject : ParseObject
+    {
+        [ParseFieldName("user_profile")]
+        public ComplexObject Profile { get; set; }
+
+        [ParseFieldName("views_count")]
+        public int Views { get; set; }
+
+        [ParseFieldName("is_active")]
+        public bool IsActive { get; set; }
+    }
+
+    [TestMethod]
+    [Description("Tests that ExpressionHelper correctly extracts single and deep nested properties with their [ParseFieldName] attributes.")]
+    public void ExpressionHelper_ResolvesDeepPropertiesCorrectly()
+    {
+        // 1. Simple Property with attribute
+        var field = ExpressionHelper.GetParseFieldName<ComplexObject, int>(x => x.Views);
+        Assert.AreEqual("views_count", field);
+
+        // 2. Boolean Property (Verifies Unary/Convert expressions are unwrapped)
+        var activeField = ExpressionHelper.GetParseFieldName<ComplexObject, bool>(x => x.IsActive);
+        Assert.AreEqual("is_active", activeField);
+
+        // 3. Deep Nested Property pathing
+        var deepField = ExpressionHelper.GetParseFieldName<ComplexObject, int>(x => x.Profile.Profile.Views);
+        Assert.AreEqual("user_profile.user_profile.views_count", deepField, "The path should recursively append nested members.");
+    }
+
+    [TestMethod]
+    [Description("Tests that strongly typed query overloads successfully append constraints.")]
+    public void Query_WithStronglyTypedExpression_AppendsConstraint()
+    {
+        var query = new ParseQuery<ComplexObject>(MockHub.Object,"ComplexObject")
+            .WhereEqualTo(x => x.Views, 42)
+            .Include(x => x.Profile.Profile);
+        // Assert EqualTo
+        var constraint = query.GetConstraint("views_count");
+        Assert.AreEqual(42, constraint);
+
+        // Assert Include path
+        var queryParams = query.BuildParameters();
+        Assert.AreEqual("user_profile.user_profile", queryParams["include"]);
     }
 }
