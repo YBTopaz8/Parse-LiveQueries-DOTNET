@@ -22,8 +22,8 @@ public class WebSocketClient : IWebSocketClient, IDisposable
     private readonly Uri _hostUri;
     private readonly IWebSocketClientCallback _webSocketClientCallback;
     
-    private ClientWebSocket _webSocket;
-    private CancellationTokenSource _internalCts; 
+    private ClientWebSocket? _webSocket;
+    private CancellationTokenSource? _internalCts; 
     private readonly object _stateLock = new(); 
 
     
@@ -94,7 +94,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
 
         
 
-        CancellationTokenSource linkedCts = null;
+        CancellationTokenSource? linkedCts = null;
         try
         {
             lock (_stateLock)
@@ -191,8 +191,8 @@ public class WebSocketClient : IWebSocketClient, IDisposable
     private async Task ReceiveLoopAsync(CancellationToken loopCancellationToken)
     {
         
-        byte[] buffer = null;
-        MemoryStream messageStream = null;
+        byte[]? buffer = null;
+        MemoryStream? messageStream = null;
 
         try
         {
@@ -220,7 +220,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
                         case WebSocketMessageType.Text:
                         case WebSocketMessageType.Binary:
                             
-                            await messageStream.WriteAsync(bufferSegment.Slice(0, receiveResult.Count), loopCancellationToken);
+                            await messageStream.WriteAsync(bufferSegment[..receiveResult.Count], loopCancellationToken);
                             break;
 
                         case WebSocketMessageType.Close:
@@ -369,8 +369,8 @@ public class WebSocketClient : IWebSocketClient, IDisposable
             return;
         }
 
-        ClientWebSocket socketToClose = null;
-        CancellationTokenSource internalCtsToCancel = null;
+        ClientWebSocket? socketToClose = null;
+        CancellationTokenSource? internalCtsToCancel = null;
 
         lock (_stateLock)
         {
@@ -465,7 +465,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
 
         while (!combinedToken.IsCancellationRequested && _reconnectionAttempts < MaxReconnectionAttempts)
         {
-            ClientWebSocket newWebSocket = null;
+            ClientWebSocket? newWebSocket = null;
             try
             {
                 newWebSocket = new ClientWebSocket();
@@ -484,6 +484,8 @@ public class WebSocketClient : IWebSocketClient, IDisposable
 
                 
                 await _webSocketClientCallback.OnOpenAsync().ConfigureAwait(false);
+                if (_internalCts is null)
+                    _internalCts = new();
                 _ = Task.Run(() => ReceiveLoopAsync(_internalCts.Token), combinedToken); 
 
                 return; 

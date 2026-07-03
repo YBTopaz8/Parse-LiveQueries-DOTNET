@@ -8,11 +8,11 @@ namespace Parse.Abstractions.Platform.Objects;
 public interface IObjectState : IEnumerable<KeyValuePair<string, object>>, INotifyPropertyChanged
 {
     bool IsNew { get; }
-    string ClassName { get; set; }
-    string ObjectId { get; }
+    string? ClassName { get; set; }
+    string? ObjectId { get; }
     DateTime? UpdatedAt { get; }
     DateTime? CreatedAt { get; }
-    object this[string key] { get; }
+    object? this[string key] { get; }
 
     bool ContainsKey(string key);
 

@@ -130,7 +130,7 @@ public class ParseObjectController : IParseObjectController
 
     public async Task<bool> DeleteAsync(IObjectState state, string sessionToken, CancellationToken cancellationToken = default)
     {
-        if (state.ObjectId == null)
+        if (state.ObjectId == null || state.ClassName is null)
         {
             return false;
         }
@@ -228,8 +228,8 @@ public class ParseObjectController : IParseObjectController
                 return;
             }
 
-            IList<object> resultsArray = Conversion.As<IList<object>>(task.Result.Item2["results"]);
-            int resultLength = resultsArray.Count;
+            IList<object>? resultsArray = Conversion.As<IList<object>>(task.Result?.Item2["results"]);
+            int? resultLength = resultsArray?.Count;
 
             if (resultLength != batchSize)
             {
@@ -241,7 +241,7 @@ public class ParseObjectController : IParseObjectController
 
             for (int i = 0; i < batchSize; ++i)
             {
-                Dictionary<string, object> result = resultsArray[i] as Dictionary<string, object>;
+                Dictionary<string, object>? result = resultsArray[i] as Dictionary<string, object>;
                 TaskCompletionSource<IDictionary<string, object>> target = completionSources[i];
 
                 if (result.ContainsKey("success"))

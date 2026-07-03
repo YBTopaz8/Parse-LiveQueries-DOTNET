@@ -10,7 +10,7 @@ namespace Parse.Infrastructure.Utilities;
 /// </summary>
 public class IdentityEqualityComparer<T> : IEqualityComparer<T>
 {
-    public bool Equals(T x, T y)
+    public bool Equals(T? x, T? y)
     {
         return ReferenceEquals(x, y);
     }

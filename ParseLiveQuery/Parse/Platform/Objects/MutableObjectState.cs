@@ -13,14 +13,14 @@ namespace Parse.Platform.Objects;
 public class MutableObjectState : IObjectState
 {
     public bool IsNew { get; set; }
-    public string ClassName { get; set; }
-    public string ObjectId { get; set; }
+    public string? ClassName { get; set; }
+    public string? ObjectId { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public DateTime? CreatedAt { get; set; }
-    public string SessionToken { get; set; } // Added
+    public string? SessionToken { get; set; } // Added
 
-    public IDictionary<string, object> ServerData { get; set; } = new Dictionary<string, object>();
-    public object this[string key]
+    public IDictionary<string, object?> ServerData { get; set; } = new Dictionary<string, object?>();
+    public object? this[string key]
     {
         get => ServerData.ContainsKey(key) ? ServerData[key] : null;
         set
@@ -161,11 +161,12 @@ public class MutableObjectState : IObjectState
         return null;
     }
 
-    private static DateTime? DecodeDateTime(object value)
+    private static DateTime? DecodeDateTime(object? value)
     {
         try
         {
-            return value is DateTime dateTime ? dateTime : DateTime.Parse(value.ToString());
+            if (value is null) return null;
+            return value is DateTime dateTime ? dateTime : DateTime.Parse(value.ToString()!);
         }
         catch
         {
