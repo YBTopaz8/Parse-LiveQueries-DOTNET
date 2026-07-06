@@ -112,19 +112,19 @@ internal class ParseObjectClassController : IParseObjectClassController
         Mutex.ExitWriteLock();
     }
 
-    public ParseObject Instantiate(string className, IServiceHub serviceHub)
+    public ParseObject? Instantiate(string className, IServiceHub serviceHub)
     {
         
         Mutex.EnterReadLock();
         
-        Classes.TryGetValue(className, out ParseObjectClass info);
+        Classes.TryGetValue(className, out ParseObjectClass? info);
         
         Mutex.ExitReadLock();
         
         if (info is { })
         {
         
-            var obj = info.Instantiate().Bind(serviceHub);
+            var obj = info.Instantiate()?.Bind(serviceHub);
         
             return obj;
         }
@@ -139,11 +139,11 @@ internal class ParseObjectClassController : IParseObjectClassController
     public IDictionary<string, string> GetPropertyMappings(string className)
     {        
         Mutex.EnterReadLock();
-        Classes.TryGetValue(className, out ParseObjectClass info);        
+        Classes.TryGetValue(className, out ParseObjectClass? info);        
         if (info is null)
             Classes.TryGetValue(ReservedParseObjectClassName, out info);        
         Mutex.ExitReadLock();        
-        return info.PropertyMappings;
+        return info?.PropertyMappings ?? new Dictionary<string, string>();
     }
 
     bool SDKClassesAdded { get; set; }

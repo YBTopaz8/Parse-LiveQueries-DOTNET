@@ -18,7 +18,7 @@ public interface IParseObjectClassController
 
     void AddRegisterHook(Type type, Action action);
 
-    ParseObject Instantiate(string className, IServiceHub serviceHub);
+    ParseObject? Instantiate(string className, IServiceHub serviceHub);
 
     IDictionary<string, string> GetPropertyMappings(string className);
 

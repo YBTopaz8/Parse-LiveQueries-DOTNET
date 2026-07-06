@@ -1,15 +1,15 @@
+using Parse.Abstractions.Infrastructure;
+using Parse.Abstractions.Infrastructure.Control;
+using Parse.Abstractions.Internal;
+using Parse.Abstractions.Platform.Objects;
+using Parse.Infrastructure.Data;
+using Parse.Infrastructure.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Parse.Abstractions.Infrastructure;
-using Parse.Abstractions.Internal;
-using Parse.Abstractions.Infrastructure.Control;
-using Parse.Abstractions.Platform.Objects;
-using Parse.Infrastructure.Utilities;
-using Parse.Infrastructure.Data;
-using System.Diagnostics;
 
 namespace Parse;
 
@@ -71,7 +71,7 @@ public static class ObjectServiceExtensions
     /// </summary>
     /// <param name="className">The class of object to create.</param>
     /// <returns>A new ParseObject for the given class name.</returns>
-    public static ParseObject CreateObject(this IServiceHub serviceHub, string className)
+    public static ParseObject? CreateObject(this IServiceHub serviceHub, string className)
     {
         return serviceHub.ClassController.Instantiate(className, serviceHub);
     }
@@ -82,17 +82,17 @@ public static class ObjectServiceExtensions
     /// <returns>A new ParseObject for the given class name.</returns>
     public static T CreateObject<T>(this IServiceHub serviceHub) where T : ParseObject
     {
-        return (T) serviceHub.ClassController.CreateObject<T>(serviceHub);
+        return (T)serviceHub.ClassController.CreateObject<T>(serviceHub);
     }
 
     /// <summary>
     /// Creates a new ParseObject based upon a given subclass type.
     /// </summary>
     /// <returns>A new ParseObject for the given class name.</returns>
-    public static T CreateObject<T>(this IParseObjectClassController classController, IServiceHub serviceHub) where T : ParseObject
+    public static T? CreateObject<T>(this IParseObjectClassController classController, IServiceHub serviceHub) where T : ParseObject
     {
 
-        return (T) classController.Instantiate(classController.GetClassName(typeof(T)), serviceHub);
+        return (T?)classController.Instantiate(classController.GetClassName(typeof(T)), serviceHub);
     }
 
     /// <summary>
@@ -161,7 +161,7 @@ public static class ObjectServiceExtensions
     /// <returns>A ParseObject without data.</returns>
     public static T CreateObjectWithoutData<T>(this IServiceHub serviceHub, string objectId) where T : ParseObject
     {
-        return (T) serviceHub.CreateObjectWithoutData(serviceHub.ClassController.GetClassName(typeof(T)), objectId);
+        return (T)serviceHub.CreateObjectWithoutData(serviceHub.ClassController.GetClassName(typeof(T)), objectId);
     }
     /// <summary>
     /// Creates a reference to a new ParseObject with the specified initial data.
@@ -178,7 +178,7 @@ public static class ObjectServiceExtensions
         }
 
         // Create a new instance of the specified ParseObject type
-        var parseObject = (T) serviceHub.CreateObject(serviceHub.ClassController.GetClassName(typeof(T)));
+        var parseObject = (T)serviceHub.CreateObject(serviceHub.ClassController.GetClassName(typeof(T)));
 
         // Set initial data properties
         foreach (var kvp in initialData)
@@ -304,7 +304,7 @@ public static class ObjectServiceExtensions
     /// <param name="objects">The objects to save.</param>
     public static async Task SaveObjectsAsync<T>(this IServiceHub serviceHub, IEnumerable<T> objects) where T : ParseObject
     {
-         await SaveObjectsAsync(serviceHub, objects, CancellationToken.None).ConfigureAwait(false);
+        await SaveObjectsAsync(serviceHub, objects, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -339,30 +339,48 @@ public static class ObjectServiceExtensions
     }
 
     internal static T GenerateObjectFromState<T>(
-     this IParseObjectClassController classController,
-     IObjectState state,
-     string defaultClassName,
-     IServiceHub serviceHub) where T : ParseObject
+      this IParseObjectClassController classController,
+      IObjectState state,
+      string defaultClassName,
+      IServiceHub serviceHub) where T : ParseObject
     {
-
         if (state == null)
             throw new ArgumentNullException(nameof(state));
 
         // Get the class name, but we won't use it for the constructor.
         string className = state.ClassName ?? defaultClassName;
 
-
         try
         {
-            T obj = classController.Instantiate(className, serviceHub) as T;
-            obj.HandleFetchResult(state);
+            // 1. Try to instantiate the object
+            var instantiatedObj = classController.Instantiate(className, serviceHub);
 
+            // 2. Perform the cast to T
+            T? obj = instantiatedObj as T;
+
+            // 3. Catch the specific failure where the class was NOT registered
+            if (obj == null)
+            {
+                throw new InvalidCastException(
+                    $"\n[Parse SDK Error] Failed to cast the server response to '{typeof(T).Name}'.\n" +
+                    $"Reason: The class '{className}' has not been registered with the SDK.\n" +
+                    $"Fix: Add 'ParseClient.Instance.RegisterSubclass(typeof({typeof(T).Name}));' " +
+                    $"to your application startup code BEFORE executing queries."
+                );
+            }
+
+            // 4. Handle the state merge
+            obj.HandleFetchResult(state);
             return obj;
+        }
+        catch (InvalidCastException)
+        {
+            throw; // Let our friendly custom exception bubble up directly!
         }
         catch (Exception ex)
         {
             // Preserve the original exception type and stack trace for easier debugging
-            throw new InvalidOperationException($"Failed to generate ParseObject subclass '{typeof(T).Name}' from server state for class '{className}'. Ensure the subclass is registered.", ex);
+            throw new InvalidOperationException($"Failed to generate ParseObject subclass '{typeof(T).Name}' from server state for class '{className}'.", ex);
         }
     }
     internal static IDictionary<string, object> GenerateJSONObjectForSaving(
@@ -373,7 +391,7 @@ public static class ObjectServiceExtensions
         foreach (KeyValuePair<string, IParseFieldOperation> pair in operations)
         {
             var s = PointerOrLocalIdEncoder.Instance.Encode(pair.Value, serviceHub);
-            
+
             result[pair.Key] = s;
         }
 
@@ -399,7 +417,7 @@ public static class ObjectServiceExtensions
             {
                 continue;
             }
-                ICollection<ParseObject> scopedSeenNew;
+            ICollection<ParseObject> scopedSeenNew;
 
             // Check for cycles of new objects. Any such cycle means it will be impossible to save
             // this collection of objects, so throw an exception.
