@@ -143,7 +143,7 @@ public class ParseObjectController : IParseObjectController
                 sessionToken: sessionToken,
                 data: null
             );
-
+            
             await CommandRunner.RunCommandAsync(command, cancellationToken: cancellationToken).ConfigureAwait(false);
             return true;
         }

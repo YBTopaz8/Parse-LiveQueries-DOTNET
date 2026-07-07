@@ -591,7 +591,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <typeparam name="T">The type of object to create a relation for.</typeparam>
     /// <param name="key">The key for the relation field.</param>
     /// <returns>A ParseRelation for the key.</returns>
-    public ParseRelation<T> GetRelation<T>(string key) where T : ParseObject
+    public ParseRelation<T>? GetRelation<T>(string key) where T : ParseObject
     {
         // All the sanity checking is done when add or remove is called.
 
@@ -801,11 +801,10 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
 
     internal async Task<bool> DeleteAsyncInternal(CancellationToken cancellationToken)
     {
-        if (ObjectId == null)
+        if (ObjectId == null )
         {
             return false; // No need to delete if the object has no server ID
         }
-
         var sessionToken = await Services.GetCurrentSessionToken();
         bool deleted = await Services.ObjectController.DeleteAsync(State, sessionToken, cancellationToken).ConfigureAwait(false);
 
