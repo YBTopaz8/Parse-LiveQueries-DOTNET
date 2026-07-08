@@ -750,7 +750,10 @@ public class ParseQuery<T> where T : ParseObject
     #endregion
 
     #region Strongly-Typed Expression Overloads
-
+    public ParseQuery<T> WhereEqualTo<TRelated>(Expression<Func<T, ParseRelation<TRelated>>> keySelector, TRelated value)where TRelated : ParseObject
+    {
+        return WhereEqualTo(ExpressionHelper.GetParseFieldName(keySelector), value);
+    }
     public ParseQuery<T> WhereEqualTo<TProp>(Expression<Func<T, TProp>> keySelector, TProp value)
     {
         return WhereEqualTo(ExpressionHelper.GetParseFieldName(keySelector), value);
