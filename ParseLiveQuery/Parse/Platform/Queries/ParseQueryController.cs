@@ -34,7 +34,7 @@ internal class ParseQueryController : IParseQueryController
         var result = await FindAsync(query.ClassName, query.BuildParameters(), user?.SessionToken, cancellationToken).ConfigureAwait(false);
 
         // Check if the result contains an error code
-        if (result.TryGetValue("code", out object codeValue) && codeValue is long errorCode)
+        if (result.TryGetValue("code", out object? codeValue) && codeValue is long errorCode)
         {
             if (errorCode == 102) // Specific handling for "Cannot query on ACL"
             {
@@ -45,7 +45,7 @@ internal class ParseQueryController : IParseQueryController
         }
 
         // Process raw results
-        var rawResults = result.TryGetValue("results", out object results) ? results as IList<object> : new List<object>();
+        var rawResults = result.TryGetValue("results", out object? results) ? results as IList<object> : new List<object>();
         if (rawResults is null || rawResults.Count == 0)
         {
             return Enumerable.Empty<IObjectState>();

@@ -17,5 +17,5 @@ public interface IWebClient
     /// <param name="downloadProgress">Download progress callback.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that resolves to Htt</returns>
-    Task<Tuple<Status, string>> ExecuteAsync(WebRequest httpRequest, IProgress<IDataTransferLevel> uploadProgress, IProgress<IDataTransferLevel> downloadProgress, CancellationToken cancellationToken = default);
+    Task<Tuple<Status, string>> ExecuteAsync(WebRequest httpRequest, IProgress<IDataTransferLevel>? uploadProgress, IProgress<IDataTransferLevel>? downloadProgress, CancellationToken cancellationToken = default);
 }
