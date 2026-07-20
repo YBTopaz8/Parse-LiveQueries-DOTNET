@@ -1,6 +1,8 @@
 # Parse-Live-Query-Unofficial v3 (with RX and LINQ Support)
 
-# Grab the Nuget Here: [![Nuget](https://img.shields.io/nuget/v/yb.parselivequerydotnet.svg)](https://www.nuget.org/packages/YB.ParseLiveQueryDotNet)
+# Grab the Nuget Here: [![Nuget](https://img.shields.io/nuget/v/yb.parselivequerydotnet.svg)](https://www.nuget.org/packages/YB.ParseLiveQueryDotNet) ![NuGet Downloads](https://img.shields.io/nuget/dt/YB.ParseLiveQueryDotNet)
+
+
 
 ## What is Live Query?
 Live Query provides real-time data sync between server and clients over WebSockets. When data changes on the server, subscribed clients are instantly notified.
