@@ -124,17 +124,26 @@ public class ParseLiveQueryClient :IAsyncDisposable
         }
         return Enumerable.Empty<Subscription>().ToList(); 
     }
-    public Subscription<T> Subscribe<T>(ParseQuery<T> query, string SubscriptionName=null) where T : ParseObject
+    public Subscription<T> Subscribe<T>(ParseQuery<T> query, string? SubscriptionName=null) where T : ParseObject
     {
         void unsubscribeAction(Subscription subscription)
         {
-            if (_subscriptions.TryRemove(subscription.RequestID, out var removedSubscription)&&!string.IsNullOrEmpty(removedSubscription.Name))
+            if (_subscriptions.TryRemove(subscription.RequestID, out var removedSubscription))
             {
-                _namedSubscriptions.TryRemove(removedSubscription.Name, out _);
+                if (!string.IsNullOrEmpty(removedSubscription.Name))
+                {
+                    _namedSubscriptions.TryRemove(removedSubscription.Name, out _);
+                }
+
+              
+                if (ConnectionState == LiveQueryConnectionState.Connected)
+                {
+                    _ = SendUnsubscriptionAsync(removedSubscription);
+                }
             }
         }
 
-        
+
         var requestId = Interlocked.Increment(ref _requestIdCount);
         var subscription = _subscriptionFactory.CreateSubscription(requestId, query, unsubscribeAction);
         if (!string.IsNullOrEmpty(SubscriptionName))
@@ -217,12 +226,8 @@ public class ParseLiveQueryClient :IAsyncDisposable
         }
     }
 
-    public async Task Unsubscribe<T>(ParseQuery<T> query) where T : ParseObject
-    {
-        if (query == null)
-            return;
-        await RemoveSubscriptions(query, null).ConfigureAwait(false);
-    }
+   
+
 
     public async Task Unsubscribe<T>(ParseQuery<T> query, Subscription<T> subscription) where T : ParseObject
     {
@@ -403,7 +408,8 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
     private async Task ParseMessage(string message)
     {
-        
+
+        Debug.WriteLine($"[RAW WEBSOCKET PAYLOAD] {message}");
         try
         {
             var jsonElementDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message);
@@ -754,9 +760,11 @@ public class ParseLiveQueryClient :IAsyncDisposable
             return;
 
         _clientState = ClientState.Started;
-        
+        startCtr++;
         ConnectIfNeeded(); // Start the connection loop
+        Debug.WriteLine($"Start ctr {startCtr}");
     }
+    int startCtr = 0;
     /// <summary>
     /// Explicitly stops the client, disconnects, and disables auto-reconnection.
     /// </summary>

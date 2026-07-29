@@ -284,6 +284,7 @@ public abstract class Subscription : IDisposable
     /// as it's used for communication and casted appropriately in subclasses.
     /// </summary>
     internal protected object QueryObj { get; set; }
+    
     /// <summary>
     /// The request ID
     /// </summary>

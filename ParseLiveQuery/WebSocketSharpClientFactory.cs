@@ -84,15 +84,16 @@ public class WebSocketClient : IWebSocketClient, IDisposable
     }
 
     public IObservable<ReadOnlyMemory<byte>> BinaryMessages => throw new NotImplementedException();
-    
 
+
+    int openCtr = 0;
 
     public async Task OpenAsync(CancellationToken cancellationToken = default)
     {
         if (_disposed)
             throw new ObjectDisposedException(nameof(WebSocketClient));
-
-        
+        openCtr++;
+        Debug.WriteLine(openCtr);
 
         CancellationTokenSource? linkedCts = null;
         try
