@@ -71,7 +71,7 @@ public class ParseConfiguration : IJsonConvertible
     /// <param name="result">The value for the given key, converted to the
     /// requested type, or null if unsuccessful.</param>
     /// <returns>true if the lookup and conversion succeeded, otherwise false.</returns>
-    public bool TryGetValue<T>(string key, out T result)
+    public bool TryGetValue<T>(string key, out T? result)
     {
         result = default;
 

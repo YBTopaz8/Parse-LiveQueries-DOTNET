@@ -196,7 +196,7 @@ public abstract class ParseDataEncoder
     {
 
 
-        List<object> encoded = new();
+        List<object?> encoded = new();
         foreach (var item in list)
         {
             if (item == null)
@@ -207,8 +207,7 @@ public abstract class ParseDataEncoder
 
             if (!Validate(item))
             {
-                Debug.WriteLine("sss");
-                Console.WriteLine("console sss");
+                
                 throw new ArgumentException($"Invalids type for value in list: {item?.GetType().FullName}");
             }
 

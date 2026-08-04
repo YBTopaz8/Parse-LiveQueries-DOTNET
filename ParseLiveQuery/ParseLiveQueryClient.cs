@@ -1,7 +1,6 @@
 ﻿using Parse.Abstractions.Infrastructure;
 using Parse.Infrastructure;
 using Parse.Infrastructure.Data;
-
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -10,10 +9,11 @@ using System.Linq;
 using System.Net.WebSockets;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
-
 using YB.Parse.LiveQuery;
 
 namespace Parse.LiveQuery;
@@ -124,8 +124,22 @@ public class ParseLiveQueryClient :IAsyncDisposable
         }
         return Enumerable.Empty<Subscription>().ToList(); 
     }
-    public Subscription<T> Subscribe<T>(ParseQuery<T> query, string? SubscriptionName=null) where T : ParseObject
+    public void UnsubscribeByName(string subscriptionName)
     {
+        if (_namedSubscriptions.TryGetValue(subscriptionName, out var existingSub))
+        {
+            existingSub.UnsubscribeNow();
+        }
+    }
+    public Subscription<T> Subscribe<T>(ParseQuery<T> query, string? SubscriptionName=null, [CallerMemberName] string callerName = "",
+    [CallerFilePath] string callerFile = "",
+    [CallerLineNumber] int callerLine = 0) where T : ParseObject
+    {
+
+        if (!string.IsNullOrEmpty(SubscriptionName) && _namedSubscriptions.TryGetValue(SubscriptionName, out var existingSub))
+        {
+            existingSub.UnsubscribeNow();
+        }
         void unsubscribeAction(Subscription subscription)
         {
             if (_subscriptions.TryRemove(subscription.RequestID, out var removedSubscription))
@@ -145,6 +159,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
 
         var requestId = Interlocked.Increment(ref _requestIdCount);
+
         var subscription = _subscriptionFactory.CreateSubscription(requestId, query, unsubscribeAction);
         if (!string.IsNullOrEmpty(SubscriptionName))
         {
@@ -162,7 +177,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
         if (ConnectionState == LiveQueryConnectionState.Connected)
         {
-            _ = SendSubscriptionAsync(subscription);
+            _ = SendOperationWithSessionAsync(session => subscription.CreateSubscribeClientOperation(session ?? string.Empty));
         }
 
         return subscription;
@@ -291,13 +306,13 @@ public class ParseLiveQueryClient :IAsyncDisposable
             };
     }
 
-    
 
     private Task SendSubscriptionAsync(Subscription subscription)
     {
        return  _taskQueue.EnqueueOnError(
             SendOperationWithSessionAsync(session =>
             {
+               
                 return subscription.CreateSubscribeClientOperation(session ?? string.Empty);
             }),
             error => subscription.DidEncounter(subscription.QueryObj, new LiveQueryException.UnknownException("Error when subscribing", error))
@@ -408,10 +423,12 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
     private async Task ParseMessage(string message)
     {
-
-        Debug.WriteLine($"[RAW WEBSOCKET PAYLOAD] {message}");
         try
         {
+
+            //var jsonNode = JsonNode.Parse(message);
+            //if (jsonNode is not JsonObject jsonObject) return;
+
             var jsonElementDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message);
 
             if (jsonElementDict == null || !jsonElementDict.ContainsKey("op"))
@@ -420,7 +437,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
             }
 
             var jsonObject = ConvertJsonElements(jsonElementDict);
-            string rawOperation = jsonObject["op"] as string;
+            string rawOperation = (jsonObject["op"] as string)!;
             if (string.IsNullOrEmpty(rawOperation))
             {
                 throw new LiveQueryException.InvalidResponseException("'op' field is null or empty.");
@@ -501,7 +518,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
                 { 
                     var originalObjectData = JsonElementToDictionary((JsonElement)message);
 
-                    var originalParseObj = ParseClient.Instance.Decoder.Decode(originalObjectData, ParseClientInstance);
+                    var originalParseObj = ParseClientInstance.Decoder.Decode(originalObjectData, ParseClientInstance);
 
                     subscription.DidReceive(subscription.QueryObj, subscriptionEvent, obj as ParseObject, originalParseObj as ParseObject);
 
@@ -756,15 +773,15 @@ public class ParseLiveQueryClient :IAsyncDisposable
     public void Start()
     {
         ThrowIfDisposed();
-        if (_clientState == ClientState.Started)
-            return;
+        lock (_stateLock)
+        {
+            if (_clientState == ClientState.Started) return;
+            _clientState = ClientState.Started;
+        }
 
-        _clientState = ClientState.Started;
-        startCtr++;
         ConnectIfNeeded(); // Start the connection loop
-        Debug.WriteLine($"Start ctr {startCtr}");
+
     }
-    int startCtr = 0;
     /// <summary>
     /// Explicitly stops the client, disconnects, and disables auto-reconnection.
     /// </summary>
