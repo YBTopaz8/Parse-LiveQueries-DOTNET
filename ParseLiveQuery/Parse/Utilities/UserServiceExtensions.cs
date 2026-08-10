@@ -26,7 +26,7 @@ public static class UserServiceExtensions
     /// <param name="username">The value that should be used for <see cref="ParseUser.Username"/>.</param>
     /// <param name="password">The value that should be used for <see cref="ParseUser.Password"/>.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    public static Task SignUpWithAsync(this IServiceHub serviceHub, string username, string password, CancellationToken cancellationToken = default)
+    public static Task<ParseUser> SignUpWithAsync(this IServiceHub serviceHub, string username, string password, CancellationToken cancellationToken = default)
     {
         var Puser = new ParseUser { Services = serviceHub, Username = username, Password = password };
         return Puser.SignUpAsync(cancellationToken);

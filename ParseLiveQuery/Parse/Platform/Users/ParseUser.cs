@@ -9,7 +9,7 @@ using Parse.Abstractions.Platform.Objects;
 namespace Parse;
 
 [ParseClassName("_User")]
-public class ParseUser : ParseObject
+public partial class ParseUser : ParseObject
 {
     /// <summary>
     /// Gets whether this user is currently authenticated on this client.
