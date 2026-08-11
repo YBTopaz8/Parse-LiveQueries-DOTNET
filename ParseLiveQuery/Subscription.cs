@@ -102,7 +102,7 @@ public class Subscription<T> : Subscription where T : ParseObject
 
     internal override void DidReceive(object queryObj, Event objEvent, ParseObject obj, ParseObject? OriginalObject=null)
     {
-
+        if (_disposed) return;
         T typedObj = obj as T;
         if (typedObj == null && obj != null)
         {
@@ -141,8 +141,17 @@ public class Subscription<T> : Subscription where T : ParseObject
                 break;
         }
 
-        // Also push to the observable stream for advanced users.
-        _eventStream.OnNext(new SubscriptionEvent<T>(query, objEvent, typedObj));
+        if (!_disposed)
+        {
+            try 
+            { 
+                _eventStream.OnNext(new SubscriptionEvent<T>(query, objEvent, typedObj)); 
+            } catch (ObjectDisposedException objDispEx) 
+            {
+                Debug.WriteLine(objDispEx.Message);
+                Console.WriteLine(objDispEx.Message);
+            }
+        }
     }
     /// <summary>
     /// Handles an error encountered by the Live Query subscription.
@@ -160,9 +169,10 @@ public class Subscription<T> : Subscription where T : ParseObject
     /// <param name="queryObj">The query object associated with the subscription.</param>
     internal override void DidSubscribe(object queryObj)
     {
+        if (_disposed) return; 
         isConnected = true;
-        // Publish to the subscribe stream
-        _subscribeStream.OnNext((ParseQuery<T>)queryObj);
+
+        try { _subscribeStream.OnNext((ParseQuery<T>)queryObj); } catch (ObjectDisposedException) { }
     }
 
     /// <summary>
@@ -171,6 +181,7 @@ public class Subscription<T> : Subscription where T : ParseObject
     /// <param name="queryObj">The query object associated with the unsubscription.</param>
     internal override void DidUnsubscribe(object queryObj)
     {
+        if (_disposed) return;
         isConnected = false;
         // Publish to the unsubscribe stream
         _unsubscribeStream.OnNext((ParseQuery<T>)queryObj);
@@ -193,20 +204,27 @@ public class Subscription<T> : Subscription where T : ParseObject
     /// <param name="disposing">True if called from Dispose, false if called from a finalizer.</param>
     protected override void Dispose(bool disposing)
     {
+        if (_disposed) return;
         if (disposing)
         {
-            _eventStream.OnCompleted();
-            _errorStream.OnCompleted();
-            _subscribeStream.OnCompleted();
-            _unsubscribeStream.OnCompleted();
+            try
+            {
+                _eventStream.OnCompleted();
+                _errorStream.OnCompleted();
+                _subscribeStream.OnCompleted();
+                _unsubscribeStream.OnCompleted();
 
-            _eventStream.Dispose();
-            _errorStream.Dispose();
-            _subscribeStream.Dispose();
-            _unsubscribeStream.Dispose();
+                _eventStream.Dispose();
+                _errorStream.Dispose();
+                _subscribeStream.Dispose();
+                _unsubscribeStream.Dispose();
+            }
+            catch
+            {
+            }
+
         }
-
-
+        base.Dispose(disposing);
     }
 
 
@@ -411,7 +429,7 @@ public abstract class Subscription : IDisposable
 
 
     // Dispose Pattern
-    private bool _disposed = false;
+    protected bool _disposed = false;
     public void Dispose()
     {
         Dispose(true);
@@ -424,8 +442,13 @@ public abstract class Subscription : IDisposable
         {
             if (disposing)
             {
-                // No managed resources to dispose in the base class directly.
-                // Derived classes will handle their own Subjects.
+                try
+                {
+                    UnsubscribeInternal();
+                }
+                catch
+                {
+                }
             }
 
             _disposed = true;
