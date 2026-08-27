@@ -112,7 +112,7 @@ internal class ParseObjectClassController : IParseObjectClassController
         Mutex.ExitWriteLock();
     }
 
-    public ParseObject? Instantiate(string className, IServiceHub serviceHub)
+    public ParseObject Instantiate(string className, IServiceHub serviceHub)
     {
         
         Mutex.EnterReadLock();

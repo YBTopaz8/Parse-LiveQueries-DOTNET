@@ -58,10 +58,12 @@ public class ParseObjectController : IParseObjectController
         {
             throw new HttpRequestException("Page does not exist");
         }
+
+
         var decodedState = ParseObjectCoder.Instance.Decode(result.Item2, Decoder, serviceHub);
-        
-        // Mutating the state and marking it as new if the status code is Created
-        decodedState.MutatedClone(mutableClone => mutableClone.IsNew = result.Item1 == System.Net.HttpStatusCode.Created);
+
+        decodedState = decodedState.MutatedClone(mutableClone =>
+            mutableClone.IsNew = result.Item1 == System.Net.HttpStatusCode.Created);
 
         return decodedState;
     }
@@ -166,21 +168,14 @@ public class ParseObjectController : IParseObjectController
 
     internal IList<Task<IDictionary<string, object>>> ExecuteBatchRequests(IList<ParseCommand> requests, string sessionToken, CancellationToken cancellationToken = default)
     {
-        List<Task<IDictionary<string, object>>> tasks = new List<Task<IDictionary<string, object>>>();
-        int batchSize = requests.Count;
+        List<Task<IDictionary<string, object>>> tasks = new();
 
-        IEnumerable<ParseCommand> remaining = requests;
 
-        while (batchSize > MaximumBatchSize)
+        foreach (var batch in requests.Chunk(MaximumBatchSize))
         {
-            List<ParseCommand> process = remaining.Take(MaximumBatchSize).ToList();
-
-            remaining = remaining.Skip(MaximumBatchSize);
-            tasks.AddRange(ExecuteBatchRequest(process, sessionToken, cancellationToken));
-            batchSize = remaining.Count();
+            tasks.AddRange(ExecuteBatchRequest(batch.ToList(), sessionToken, cancellationToken));
         }
 
-        tasks.AddRange(ExecuteBatchRequest(remaining.ToList(), sessionToken, cancellationToken));
         return tasks;
     }
 

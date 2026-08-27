@@ -1481,4 +1481,21 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
             return this;
         }, cancellationToken);
     }
+
+
+
+    protected IList<T> GetListProperty<T>([CallerMemberName] string? propertyName = null)
+    {
+        var fieldName = Services?.GetFieldForPropertyName(ClassName, propertyName);
+        if (!TryGetValue(fieldName, out IList<T>? list) || list == null)
+        {
+            list = new List<T>();
+            // Ensure it is bound to the object so changes are tracked!
+            PerformOperation(fieldName, new ParseSetOperation(list));
+        }
+        return list;
+    }
+
+    public static ParseQuery<T> Query<T>() where T : ParseObject, new()
+    => new ParseQuery<T>(ParseClient.Instance.Services);
 }

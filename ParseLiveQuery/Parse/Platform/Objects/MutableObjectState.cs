@@ -1,12 +1,15 @@
+using Parse.Abstractions.Infrastructure;
+using Parse.Abstractions.Infrastructure.Control;
+using Parse.Abstractions.Platform.Objects;
+using Parse.Infrastructure;
+using Parse.Infrastructure.Control;
+using Parse.Infrastructure.Data;
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using Parse.Abstractions.Infrastructure;
-using Parse.Abstractions.Infrastructure.Control;
-using Parse.Abstractions.Platform.Objects;
-using Parse.Infrastructure.Control;
 
 namespace Parse.Platform.Objects;
 
@@ -131,7 +134,7 @@ public class MutableObjectState : IObjectState
         return ServerData.GetEnumerator();
     }
 
-    public static MutableObjectState Decode(object data, IServiceHub serviceHub)
+    public static MutableObjectState? Decode(object data)
     {
         if (data is IDictionary<string, object> dictionary)
         {
@@ -154,7 +157,8 @@ public class MutableObjectState : IObjectState
             catch (Exception ex)
             {
                 Debug.WriteLine($"Failed to decode MutableObjectState: {ex.Message}");
-                return null; // Graceful failure
+                throw new OperationCanceledException(ex.Message);
+
             }
         }
 
@@ -166,7 +170,7 @@ public class MutableObjectState : IObjectState
         try
         {
             if (value is null) return null;
-            return value is DateTime dateTime ? dateTime : DateTime.Parse(value.ToString()!);
+            return ParseDataDecoder.ParseDate(value.ToString());
         }
         catch
         {

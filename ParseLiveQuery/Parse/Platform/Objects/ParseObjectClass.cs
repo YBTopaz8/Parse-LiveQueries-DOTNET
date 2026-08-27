@@ -1,24 +1,34 @@
+﻿using Parse.Abstractions.Internal;
+using Parse.Infrastructure.Utilities;
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
-using Parse.Abstractions.Internal;
-using Parse.Infrastructure.Utilities;
 
 namespace Parse.Platform.Objects;
 
 internal class ParseObjectClass
 {
+    private readonly Func<ParseObject>? _fastActivator;
     public ParseObjectClass(Type type, ConstructorInfo constructor)
     {
         TypeInfo = type.GetTypeInfo();
         DeclaredName = TypeInfo.GetParseClassName();
         Constructor = constructor;
+
+        var parameters = constructor.GetParameters();
+        if (parameters.Length == 0)
+        {
+            _fastActivator = Expression.Lambda<Func<ParseObject>>(Expression.New(constructor)).Compile();
+        }
+
         PropertyMappings = type.GetProperties()
             .Select(property => (Property: property, FieldNameAttribute: property.GetCustomAttribute<ParseFieldNameAttribute>(true)))
             .Where(set => set.FieldNameAttribute is { })
-            .ToDictionary(set => set.Property.Name, set => set.FieldNameAttribute?.FieldName);
+            .ToDictionary(set => set.Property.Name, set => set.FieldNameAttribute!.FieldName);
     }
 
     public TypeInfo TypeInfo { get; }
@@ -29,31 +39,15 @@ internal class ParseObjectClass
 
     public ParseObject? Instantiate()
     {
-        var parameters = Constructor?.GetParameters();
-        
-        if (parameters?.Length == 0)
-        {            
-            
-            // Parameterless constructor
-            return Constructor?.Invoke(null) as ParseObject;
-        }
-        else if (parameters?.Length == 2 &&
-                 parameters[0].ParameterType == typeof(string) &&
-                 parameters[1].ParameterType == typeof(Parse.Abstractions.Infrastructure.IServiceHub))
+
+        if (_fastActivator != null)
         {
-
-            string className = Constructor?.DeclaringType?.GetParseClassName()
-                   ?? Constructor?.DeclaringType?.Name
-                   ?? ParseObject.AutoClassName;
-            // Two-parameter constructor
-          
-            var serviceHub = ParseClient.Instance.Services;
-            return Constructor?.Invoke(new object[] { className, serviceHub }) as ParseObject;
+            return _fastActivator();
         }
-        
 
-        throw new InvalidOperationException("Unsupported constructor signature.");
+        // Fallback for 2-parameter constructor
+        string className = DeclaredName ?? TypeInfo.Name;
+        return Constructor?.Invoke(new object[] { className, ParseClient.Instance.Services }) as ParseObject;
     }
-
     ConstructorInfo? Constructor { get; }
 }
