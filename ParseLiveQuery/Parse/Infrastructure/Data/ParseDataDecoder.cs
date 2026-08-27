@@ -19,7 +19,7 @@ public class ParseDataDecoder : IParseDataDecoder
     public ParseDataDecoder(IParseObjectClassController classController) => ClassController = classController;
     static string[] Types { get; } = { "Date", "Bytes", "Pointer", "File", "GeoPoint", "Object", "Relation" };
 
-    public object Decode(object data, IServiceHub serviceHub)
+    public object? Decode(object? data, IServiceHub serviceHub)
     {
     
         return data switch
@@ -69,7 +69,7 @@ public class ParseDataDecoder : IParseDataDecoder
     protected virtual object DecodePointer(string className, string objectId, IServiceHub  services) =>
         ClassController.CreateObjectWithoutData(className, objectId, services);
 
-    public static DateTime? ParseDate(string input)
+    public static DateTime? ParseDate(string? input)
     {
         if (string.IsNullOrEmpty(input))
             return null;

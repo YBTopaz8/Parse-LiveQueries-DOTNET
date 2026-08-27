@@ -29,35 +29,53 @@ public abstract class ParseDataEncoder
 
     public static bool Validate(object value)
     {
-        return value is null ||
-            value.GetType().IsPrimitive ||
-            value is string || 
-            value is Enum ||
-            value is ParseObject ||
-            value is ParseACL ||
-            value is ParseFile ||
-            value is ParseGeoPoint ||
-            value is ParseRelationBase ||
-            value is DateTime ||
-            value is byte[] ||
-            value is Guid ||
-            value is Uri ||
-            value is Array ||
-            value is DateTimeOffset ||
-            Conversion.As<IDictionary<string, object>>(value) is { } ||
-            Conversion.As<IDictionary<string, string>>(value) is { } ||
-            Conversion.As<IDictionary<string, bool>>(value) is { } ||
-            Conversion.As<IDictionary<string, Int32>>(value) is { } ||
-            Conversion.As<IDictionary<string, float>>(value) is { } ||
-            Conversion.As<IDictionary<string, long>>(value) is { } ||
-            Conversion.As<IDictionary<string, double>>(value) is { } ||
-            Conversion.As<IList<object>>(value) is { };
+        if (value is null || value.GetType().IsPrimitive || value is string || value is Enum)
+            return true;
+
+        return value switch
+        {
+            ParseObject or ParseACL or ParseFile or ParseGeoPoint or ParseRelationBase => true,
+            DateTime or DateTimeOffset or byte[] or Guid or Uri or Array => true,
+
+
+            System.Collections.IDictionary _ => true,
+            System.Collections.IList _ => true,
+
+            _ => false
+        };
     }
+
+    //public static bool Validate(object value)
+    //{
+    //    return value is null ||
+    //        value.GetType().IsPrimitive ||
+    //        value is string || 
+    //        value is Enum ||
+    //        value is ParseObject ||
+    //        value is ParseACL ||
+    //        value is ParseFile ||
+    //        value is ParseGeoPoint ||
+    //        value is ParseRelationBase ||
+    //        value is DateTime ||
+    //        value is byte[] ||
+    //        value is Guid ||
+    //        value is Uri ||
+    //        value is Array ||
+    //        value is DateTimeOffset ||
+    //        Conversion.As<IDictionary<string, object>>(value) is { } ||
+    //        Conversion.As<IDictionary<string, string>>(value) is { } ||
+    //        Conversion.As<IDictionary<string, bool>>(value) is { } ||
+    //        Conversion.As<IDictionary<string, Int32>>(value) is { } ||
+    //        Conversion.As<IDictionary<string, float>>(value) is { } ||
+    //        Conversion.As<IDictionary<string, long>>(value) is { } ||
+    //        Conversion.As<IDictionary<string, double>>(value) is { } ||
+    //        Conversion.As<IList<object>>(value) is { };
+    //}
 
     /// <summary>
     /// Encodes a given value into a JSON-compatible structure.
     /// </summary>
-    public object Encode(object value, IServiceHub serviceHub)
+    public object? Encode(object value, IServiceHub serviceHub)
     {
         if (value == null)
             return null;
@@ -194,26 +212,19 @@ public abstract class ParseDataEncoder
     /// </summary>
     private object EncodeList(IEnumerable<object> list, IServiceHub serviceHub)
     {
+        
+        int capacity = list is ICollection<object> col ? col.Count : 8;
+        List<object?> encoded = new(capacity);
 
-
-        List<object?> encoded = new();
         foreach (var item in list)
         {
             if (item == null)
-            {
-                encoded.Add(null);
-                continue;
-            }
-
+            { encoded.Add(null); continue; }
             if (!Validate(item))
-            {
-                
-                throw new ArgumentException($"Invalids type for value in list: {item?.GetType().FullName}");
-            }
+                throw new ArgumentException($"Invalid type: {item.GetType().FullName}");
 
             encoded.Add(Encode(item, serviceHub));
         }
-
         return encoded;
     }
 

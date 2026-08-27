@@ -683,7 +683,7 @@ public static class ObjectServiceExtensions
     }
 
 
-    internal static string GetFieldForPropertyName(this IServiceHub serviceHub, string className, string propertyName)
+    internal static string? GetFieldForPropertyName(this IServiceHub? serviceHub, string className, string? propertyName)
     {
         if (serviceHub == null)
         {
