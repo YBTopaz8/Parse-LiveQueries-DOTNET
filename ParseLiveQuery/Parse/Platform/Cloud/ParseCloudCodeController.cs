@@ -27,8 +27,8 @@ public class ParseCloudCodeController : IParseCloudCodeController
     string sessionToken,
     IServiceHub serviceHub,
     CancellationToken cancellationToken = default,
-    IProgress<IDataTransferLevel> uploadProgress = null,
-    IProgress<IDataTransferLevel> downloadProgress = null)
+    IProgress<IDataTransferLevel>? uploadProgress = null,
+    IProgress<IDataTransferLevel>? downloadProgress = null)
     {
         try
         {

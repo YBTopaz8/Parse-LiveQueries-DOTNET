@@ -14,15 +14,15 @@ public static class RelationServiceExtensions
     /// <summary>
     /// Produces the proper ParseRelation&lt;T&gt; instance for the given classname.
     /// </summary>
-    internal static ParseRelationBase CreateRelation(this IServiceHub serviceHub, ParseObject parent, string key, string targetClassName)
+    internal static ParseRelationBase? CreateRelation(this IServiceHub serviceHub, ParseObject parent, string key, string targetClassName)
     {
         return serviceHub.ClassController.CreateRelation(parent, key, targetClassName);
     }
 
-    internal static ParseRelationBase CreateRelation(this IParseObjectClassController classController, ParseObject parent, string key, string targetClassName)
+    internal static ParseRelationBase? CreateRelation(this IParseObjectClassController classController, ParseObject parent, string key, string targetClassName)
     {
         Expression<Func<ParseRelation<ParseObject>>> createRelationExpr = () => CreateRelation<ParseObject>(parent, key, targetClassName);
-        return (createRelationExpr.Body as MethodCallExpression).Method.GetGenericMethodDefinition().MakeGenericMethod(classController.GetType(targetClassName) ?? typeof(ParseObject)).Invoke(default, new object[] { parent, key, targetClassName }) as ParseRelationBase;
+        return (createRelationExpr.Body as MethodCallExpression)?.Method.GetGenericMethodDefinition().MakeGenericMethod(classController.GetType(targetClassName) ?? typeof(ParseObject)).Invoke(default, new object[] { parent, key, targetClassName }) as ParseRelationBase;
     }
 
     static ParseRelation<T> CreateRelation<T>(ParseObject parent, string key, string targetClassName) where T : ParseObject
@@ -56,7 +56,7 @@ public abstract class ParseRelationBase : IJsonConvertible
 
     internal void Add(ParseObject entity)
     {
-        ParseRelationOperation change = new ParseRelationOperation(Parent.Services.ClassController, new[] { entity }, default);
+        ParseRelationOperation change = new ParseRelationOperation(Parent.Services?.ClassController, new[] { entity }, default);
 
         Parent.PerformOperation(Key, change);
         TargetClassName = change.TargetClassName;
@@ -70,7 +70,7 @@ public abstract class ParseRelationBase : IJsonConvertible
         TargetClassName = change.TargetClassName;
     }
 
-    public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = default)
+    public IDictionary<string, object> ConvertToJSON(IServiceHub? serviceHub = default)
     {
         return new Dictionary<string, object>
         {

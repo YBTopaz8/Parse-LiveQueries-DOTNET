@@ -40,7 +40,7 @@ public interface IParseFieldOperation: IJsonConvertible
     /// <param name="oldValue">The previous value for the field.</param>
     /// <param name="key">The key that this value is for.</param>
     /// <returns>The new value for the field.</returns>
-    object Apply(object oldValue, string key);
+    object? Apply(object? oldValue, string key);
 
     object Value { get; } // Added property to expose operation value
 
