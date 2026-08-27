@@ -1,3 +1,8 @@
+using Parse.Infrastructure.Utilities;
+
+using System;
+using System.Linq.Expressions;
+
 namespace Parse.Abstractions.Internal;
 
 /// <summary>
@@ -21,7 +26,15 @@ public static class ParseRelationExtensions
     {
         return new ParseRelation<T>(parent, childKey, targetClassName);
     }
-
+    public static ParseRelation<TRelated>? GetRelation<T, TRelated>(
+    this T obj,
+    Expression<Func<T, ParseRelation<TRelated>>> propertySelector)
+    where T : ParseObject
+    where TRelated : ParseObject
+    {
+        var key = ExpressionHelper.GetParseFieldName(propertySelector);
+        return obj.GetRelation<TRelated>(key);
+    }
     public static string GetTargetClassName<T>(this ParseRelation<T> relation) where T : ParseObject
     {
         return relation.TargetClassName;

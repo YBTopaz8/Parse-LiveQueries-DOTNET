@@ -167,16 +167,33 @@ public class MutableObjectState : IObjectState
 
     private static DateTime? DecodeDateTime(object? value)
     {
-        try
+        if (value is null)
+            return null;
+        if (value is DateTime dateTime)
+            return dateTime;
+        if (value is DateTimeOffset dto)
+            return dto.UtcDateTime;
+
+        string str = value.ToString()!;
+        if (string.IsNullOrWhiteSpace(str))
+            return null;
+
+        // 1. Try ISO-8601 UTC Parse format
+        var parsedIso = ParseDataDecoder.ParseDate(str);
+        if (parsedIso.HasValue)
+            return parsedIso;
+
+        // 2. Fallback to standard DateTime parsers
+        if (DateTime.TryParse(str, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt))
         {
-            if (value is null) return null;
-            return ParseDataDecoder.ParseDate(value.ToString());
+            return dt;
         }
-        catch
+        if (DateTime.TryParse(str, out var dtLocal))
         {
-            Debug.WriteLine($"Failed to decode DateTime value: {value}");
-            return null; // Graceful fallback
+            return dtLocal;
         }
+
+        return null;
     }
 
     private static bool IsValidField(string key, object value)

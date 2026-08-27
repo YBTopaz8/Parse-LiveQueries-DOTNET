@@ -36,9 +36,11 @@ public abstract class ParseDataEncoder
         {
             ParseObject or ParseACL or ParseFile or ParseGeoPoint or ParseRelationBase => true,
             DateTime or DateTimeOffset or byte[] or Guid or Uri or Array => true,
+            System.Collections.IDictionary dict => dict.GetType().GetInterfaces()
+            .Any(i => i.IsConstructedGenericType &&
+                      i.GetGenericTypeDefinition() == typeof(IDictionary<,>) &&
+                      i.GetGenericArguments()[0] == typeof(string)),
 
-
-            System.Collections.IDictionary _ => true,
             System.Collections.IList _ => true,
 
             _ => false

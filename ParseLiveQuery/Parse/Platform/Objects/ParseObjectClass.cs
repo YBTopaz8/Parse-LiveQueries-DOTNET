@@ -18,11 +18,21 @@ internal class ParseObjectClass
         TypeInfo = type.GetTypeInfo();
         DeclaredName = TypeInfo.GetParseClassName();
         Constructor = constructor;
-
         var parameters = constructor.GetParameters();
-        if (parameters.Length == 0)
+
+      
+        if (parameters?.Length == 0 && typeof(ParseObject).IsAssignableFrom(type))
         {
-            _fastActivator = Expression.Lambda<Func<ParseObject>>(Expression.New(constructor)).Compile();
+            try
+            {
+                _fastActivator = Expression.Lambda<Func<ParseObject>>(
+                    Expression.Convert(Expression.New(constructor), typeof(ParseObject))
+                ).Compile();
+            }
+            catch
+            {
+                _fastActivator = null;
+            }
         }
 
         PropertyMappings = type.GetProperties()
@@ -44,7 +54,10 @@ internal class ParseObjectClass
         {
             return _fastActivator();
         }
-
+        if (!typeof(ParseObject).IsAssignableFrom(TypeInfo))
+        {
+            return null;
+        }
         // Fallback for 2-parameter constructor
         string className = DeclaredName ?? TypeInfo.Name;
         return Constructor?.Invoke(new object[] { className, ParseClient.Instance.Services }) as ParseObject;
