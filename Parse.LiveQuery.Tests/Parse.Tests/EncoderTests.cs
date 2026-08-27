@@ -49,8 +49,8 @@ public class EncoderTests
 
         Assert.IsFalse(ParseDataEncoder.Validate(new ParseAddOperation(new List<object> { })));
         Assert.IsFalse(ParseDataEncoder.Validate(Task.FromResult(new ParseObject("Corgi", Client))));
-        Assert.ThrowsExactly<MissingMethodException>(() => ParseDataEncoder.Validate(new Dictionary<object, object> { }));
-        Assert.ThrowsExactly<MissingMethodException>(() => ParseDataEncoder.Validate(new Dictionary<object, string> { }));
+        Assert.IsFalse(ParseDataEncoder.Validate(new Dictionary<object, object> { }));
+        Assert.IsFalse(ParseDataEncoder.Validate(new Dictionary<object, string> { }));
     }
 
     [TestMethod]

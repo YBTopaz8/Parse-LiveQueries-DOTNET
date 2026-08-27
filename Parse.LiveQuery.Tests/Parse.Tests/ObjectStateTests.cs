@@ -215,7 +215,7 @@ public class ObjectStateTests
                 { "test", 1}
             };
         IServiceHub mockHub = new Mock<IServiceHub>().Object;
-        var state = MutableObjectState.Decode(dict, mockHub);
+        var state = MutableObjectState.Decode(dict);
 
         Assert.IsNotNull(state);
         Assert.AreEqual("TestClass", state.ClassName);
@@ -238,7 +238,7 @@ public class ObjectStateTests
             };
         IServiceHub mockHub = new Mock<IServiceHub>().Object;
 
-        var state = MutableObjectState.Decode(dict, mockHub);
+        var state = MutableObjectState.Decode(dict);
 
         Assert.IsNotNull(state);
         Assert.IsNull(state.CreatedAt);
@@ -251,7 +251,7 @@ public class ObjectStateTests
     public void Decode_ReturnsNullForInvalidData() // Mock difficulty: 1
     {
         IServiceHub mockHub = new Mock<IServiceHub>().Object;
-        var state = MutableObjectState.Decode("invalidData", mockHub);
+        var state = MutableObjectState.Decode("invalidData");
         Assert.IsNull(state);
     }
    
