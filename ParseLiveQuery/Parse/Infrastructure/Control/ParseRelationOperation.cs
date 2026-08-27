@@ -26,7 +26,7 @@ public class ParseRelationOperation : IParseFieldOperation
         Removals = new ReadOnlyCollection<string>(removes.ToList());
     }
 
-    public ParseRelationOperation(IParseObjectClassController classController, IEnumerable<ParseObject> adds, IEnumerable<ParseObject> removes) : this(classController)
+    public ParseRelationOperation(IParseObjectClassController classController, IEnumerable<ParseObject>? adds, IEnumerable<ParseObject>? removes) : this(classController)
     {
         adds ??= new ParseObject[0];
         removes ??= new ParseObject[0];

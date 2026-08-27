@@ -31,14 +31,14 @@ public class ParseAddOperation : IParseFieldOperation
         };
     }
 
-    public object Apply(object oldValue, string key)
+    public object? Apply(object? oldValue, string key)
     {
         if (oldValue == null)
         {
             return Data.ToList(); // Initialize the value as the data
         }
 
-        var result = Conversion.To<IList<object>>(oldValue).ToList();
+        var result = Conversion.To<IList<object>>(oldValue)?.ToList();
         foreach (var obj in Data)
         {
             if (!result.Contains(obj)) // Ensure no duplicates

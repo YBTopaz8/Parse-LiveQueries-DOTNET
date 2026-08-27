@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -12,6 +13,8 @@ namespace Parse.Infrastructure.Utilities;
 
 public static class ExpressionHelper
 {
+    private static readonly ConcurrentDictionary<MemberInfo, string> _nameCache = new();
+
     /// <summary>
     /// Recursively extracts the Parse field name path from a lambda expression.
     /// Handles deep nested paths like: x => x.Parent.Child.Name -> "parent.child.name"
@@ -56,7 +59,12 @@ public static class ExpressionHelper
 
     private static string GetFieldName(MemberInfo memberInfo)
     {
-        var attribute = memberInfo.GetCustomAttribute<ParseFieldNameAttribute>();
-        return attribute != null ? attribute.FieldName : memberInfo.Name;
+        return _nameCache.GetOrAdd(memberInfo, m =>
+        {
+            var attribute = m.GetCustomAttribute<ParseFieldNameAttribute>();
+            return attribute != null ? attribute.FieldName : m.Name;
+        });
     }
+   
+
 }

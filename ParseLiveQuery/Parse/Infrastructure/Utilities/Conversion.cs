@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 
@@ -127,19 +128,20 @@ public static class Conversion
     /// The map is:
     ///    (object type, generic interface type) => constructed generic type
     /// </summary>
-    static Dictionary<Tuple<Type, Type>, Type> InterfaceLookupCache { get; } = new Dictionary<Tuple<Type, Type>, Type>();
-
+    static ConcurrentDictionary<(Type, Type), Type?> InterfaceLookupCache { get; } = new();
     static Type? GetInterfaceType(Type objType, Type genericInterfaceType)
     {
-        Tuple<Type, Type> cacheKey = new Tuple<Type, Type>(objType, genericInterfaceType);
+        var cacheKey = (objType, genericInterfaceType);
 
-        if (InterfaceLookupCache.ContainsKey(cacheKey))
-            return InterfaceLookupCache[cacheKey];
-
-        foreach (Type type in objType.GetInterfaces())
-            if (type.IsConstructedGenericType && type.GetGenericTypeDefinition() == genericInterfaceType)
-                return InterfaceLookupCache[cacheKey] = type;
-
-        return default;
+        // 2. Thread-safe, lock-free, zero-allocation lookup!
+        return InterfaceLookupCache.GetOrAdd(cacheKey, key =>
+        {
+            foreach (Type type in key.Item1.GetInterfaces())
+            {
+                if (type.IsConstructedGenericType && type.GetGenericTypeDefinition() == key.Item2)
+                    return type;
+            }
+            return null;
+        });
     }
 }
