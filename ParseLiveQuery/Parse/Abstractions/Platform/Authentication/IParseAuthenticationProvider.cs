@@ -27,7 +27,7 @@ public interface IParseAuthenticationProvider
     /// <returns><c>true</c> iff the authData was successfully synchronized. A <c>false</c> return
     /// value indicates that the user should no longer be associated because of bad auth
     /// data.</returns>
-    bool RestoreAuthentication(IDictionary<string, object> authData);
+    bool RestoreAuthentication(IDictionary<string, object>? authData);
 
     /// <summary>
     /// Provides a unique name for the type of authentication the provider does.
