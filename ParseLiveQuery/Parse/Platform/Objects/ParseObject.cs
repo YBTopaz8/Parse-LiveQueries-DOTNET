@@ -32,7 +32,7 @@ namespace Parse;
 /// to specify which existing data to retrieve.
 /// </para>
 /// </remarks>
-public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPropertyChanged
+public class ParseObject : IEnumerable<KeyValuePair<string, object?>>, INotifyPropertyChanged
 {
     internal static string AutoClassName { get; } = "_Automatic";
 
@@ -235,7 +235,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <summary>
     /// Gets the class name for the ParseObject.
     /// </summary>
-    public string ClassName => State.ClassName;
+    public string? ClassName => State.ClassName;
 
     /// <summary>
     /// Gets the first time this object was saved as the server sees it, so that if you create a
@@ -318,7 +318,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <see cref="ObjectId"/> uniquely identifies an object in your application.
     /// </summary>
     [ParseFieldName("objectId")]
-    public string ObjectId
+    public string? ObjectId
     {
         get => State.ObjectId;
         set
@@ -328,6 +328,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
             {
                 IsDirty = true;
             }
+            
             SetObjectIdInternal(value);
         }
     }
@@ -341,13 +342,14 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     [ParseFieldName("updatedAt")]
     public DateTime? UpdatedAt => State.UpdatedAt;
 
-    public IDictionary<string, IParseFieldOperation> CurrentOperations
+    public IDictionary<string, IParseFieldOperation>? CurrentOperations
     {
         get
         {
             lock (Mutex)
             {
-                return OperationSetQueue.Last.Value;
+
+                return OperationSetQueue.Last?.Value;
             }
         }
     }
@@ -367,6 +369,8 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
 
             lock (Mutex)
             {
+                if (Services is null)
+                    return false;
                 return Services.CanBeSerializedAsValue(EstimatedData);
             }
         }
@@ -374,19 +378,19 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <summary>
     /// Exposes a read-only view of this ParseObject's current estimated data fields.
     /// </summary>
-    public IReadOnlyDictionary<string, object> EstimatedDataView
+    public IReadOnlyDictionary<string, object?> EstimatedDataView
     {
         get
         {
             lock (Mutex)
             {
-                return new System.Collections.ObjectModel.ReadOnlyDictionary<string, object>(EstimatedData);
+                return new System.Collections.ObjectModel.ReadOnlyDictionary<string, object?>(EstimatedData);
             }
         }
     }
     bool Dirty { get; set; }
 
-    internal IDictionary<string, object> EstimatedData { get; } = new Dictionary<string, object> { };
+    internal IDictionary<string, object?> EstimatedData { get; } = new Dictionary<string, object?> { };
 
     internal bool Fetched { get; set; }
 
@@ -396,14 +400,17 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         {
             lock (Mutex)
             {
-                return FindUnsavedChildren().FirstOrDefault() != null;
+                var unsavedChildren = FindUnsavedChildren();
+                if(unsavedChildren is null)
+                    return false;
+                return unsavedChildren.FirstOrDefault() != null;
             }
         }
     }
 
     LinkedList<IDictionary<string, IParseFieldOperation>> OperationSetQueue { get; } = new LinkedList<IDictionary<string, IParseFieldOperation>>();
 
-    SynchronizedEventHandler<PropertyChangedEventArgs> PropertyChangedHandler { get; } = new SynchronizedEventHandler<PropertyChangedEventArgs>();
+    SynchronizedEventHandler<PropertyChangedEventArgs?> PropertyChangedHandler { get; } = new();
 
     /// <summary>
     /// Gets or sets a value on the object. It is recommended to name
@@ -414,7 +421,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <exception cref="KeyNotFoundException">The property is
     /// retrieved and <paramref name="key"/> is not found.</exception>
     /// <returns>The value for the key.</returns>
-    public virtual object this[string key]
+    public virtual object? this[string key]
     {
         get
         {
@@ -464,6 +471,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// </remarks>
     /// <param name="key">The key for which a value should be set.</param>
     /// <param name="value">The value for the key.</param>
+    [Obsolete("Use indexer obj[key] = value or strongly-typed properties instead.")]
     public void Add(string key, object value)
     {
         lock (Mutex)
@@ -550,11 +558,11 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <summary>
     /// Gets a value for the key of a particular type, or a default value if the key is not found.
     /// </summary>
-    public T GetOrDefault<T>(string key, T defaultValue = default)
+    public T? GetOrDefault<T>(string key, T? defaultValue = default)
     {
         lock (Mutex)
         {
-            return TryGetValue(key, out T result) ? result : defaultValue;
+            return TryGetValue(key, out T? result) ? result : defaultValue;
         }
     }
 
@@ -567,7 +575,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <exception cref="KeyNotFoundException">The property is
     /// retrieved and <paramref name="key"/> is not found.</exception>
     /// </summary>
-    public T Get<T>(string key)
+    public T? Get<T>(string key)
     {
         if (!ContainsKey(key))
         {
@@ -595,7 +603,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     {
         // All the sanity checking is done when add or remove is called.
 
-        TryGetValue(key, out ParseRelation<T> relation);
+        TryGetValue(key, out ParseRelation<T>? relation);
         return relation ?? new ParseRelation<T>(this, key);
     }
 
@@ -712,7 +720,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// Saves this object to the server.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
-    public Task SaveAsync(CancellationToken cancellationToken = default)
+    public Task<bool> SaveAsync(CancellationToken cancellationToken = default)
     {
         return TaskQueue.Enqueue(toAwait => SaveAsync(toAwait, cancellationToken), cancellationToken);
     }
@@ -742,7 +750,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
             {
                 try
                 {
-                    object rawValue = this[key];
+                    object? rawValue = this[key];
 
                     // 1. Handle Nulls safely
                     if (rawValue == null)
@@ -766,7 +774,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
                     }
 
                     // 3. Handle standard conversions for everything else
-                    T temp = Conversion.To<T>(rawValue);
+                    T? temp = Conversion.To<T>(rawValue);
                     result = temp;
                     return true;
                 }
@@ -801,7 +809,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
 
     internal async Task<bool> DeleteAsyncInternal(CancellationToken cancellationToken)
     {
-        if (ObjectId == null )
+        if (ObjectId == null || Services is null)
         {
             return false; // No need to delete if the object has no server ID
         }
@@ -865,11 +873,14 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
 
     internal virtual async Task<ParseObject> FetchAsyncInternal(CancellationToken cancellationToken)
     {
-        if (ObjectId == null)
+        if (ObjectId == null )
         {
             throw new InvalidOperationException("Cannot refresh an object that hasn't been saved to the server.");
         }
-
+        if (Services is null )
+        {
+            throw new NullReferenceException("Cannot refresh an object when Services are not loaded");
+        }
         var sessionToken = await Services.GetCurrentSessionToken();
         var result = await Services.ObjectController.FetchAsync(State, sessionToken, Services, cancellationToken).ConfigureAwait(false);
         HandleFetchResult(result);
@@ -884,35 +895,44 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         lock (Mutex)
         {
             // Attempt to find the node in the OperationSetQueue
-            LinkedListNode<IDictionary<string, IParseFieldOperation>> opNode = OperationSetQueue.Find(operationsBeforeSave);
+            var opNode = OperationSetQueue.Find(operationsBeforeSave);
             if (opNode == null)
             {
                 // If not found, gracefully exit or perform cleanup as needed
                 return; // Gracefully exit
             }
 
-            IDictionary<string, IParseFieldOperation> nextOperations = opNode.Next.Value;
-            bool wasDirty = nextOperations.Count > 0;
-            OperationSetQueue.Remove(opNode);
-
-            // Merge the data from the failed save into the next save.
-
-            foreach (KeyValuePair<string, IParseFieldOperation> pair in operationsBeforeSave)
+            var nextOperations = opNode.Next?.Value;
+            if (nextOperations is not null)
             {
-                IParseFieldOperation operation1 = pair.Value;
 
-                nextOperations.TryGetValue(pair.Key, out IParseFieldOperation operation2);
-                nextOperations[pair.Key] = operation2 is { } ? operation2.MergeWithPrevious(operation1) : operation1;
-            }
+                bool wasDirty = nextOperations.Count > 0;
+                OperationSetQueue.Remove(opNode);
 
-            if (!wasDirty && nextOperations == CurrentOperations && operationsBeforeSave.Count > 0)
-            {
-                OnPropertyChanged(nameof(IsDirty));
+                // Merge the data from the failed save into the next save.
+
+                foreach (KeyValuePair<string, IParseFieldOperation> pair in operationsBeforeSave)
+                {
+                    IParseFieldOperation operation1 = pair.Value;
+
+                    nextOperations!.TryGetValue(pair.Key, out var operation2);
+                    if (operation2 is not null)
+                    {
+
+                        nextOperations?[pair.Key] = operation2 is { } ? operation2.MergeWithPrevious(operation1) : operation1;
+
+                    }
+                }
+
+                if (!wasDirty && nextOperations == CurrentOperations && operationsBeforeSave.Count > 0)
+                {
+                    OnPropertyChanged(nameof(IsDirty));
+                }
             }
         }
     }
 
-    public virtual void HandleFetchResult(IObjectState serverState)
+    public virtual void HandleFetchResult(IObjectState? serverState)
     {
 
         if (serverState == null)
@@ -944,13 +964,16 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         }
         lock (Mutex)
         {
-            IDictionary<string, IParseFieldOperation> operationsBeforeSave = OperationSetQueue.First.Value;
+            var operationsBeforeSave = OperationSetQueue.First?.Value;
             OperationSetQueue.RemoveFirst();
 
             // Merge the data from the save and the data from the server into serverData.
+            if (operationsBeforeSave is not null)
+            {
 
-            MutateState(mutableClone => mutableClone.Apply(operationsBeforeSave));
-            MergeFromServer(serverState);
+                MutateState(mutableClone => mutableClone.Apply(operationsBeforeSave));
+                MergeFromServer(serverState);
+            }
         }
     }
 
@@ -992,7 +1015,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     {
         // Make a new serverData with fetched values.
 
-        Dictionary<string, object> newServerData = serverState.ToDictionary(t => t.Key, t => t.Value);
+        Dictionary<string, object?> newServerData = serverState.ToDictionary(t => t.Key, t => t.Value);
 
         lock (Mutex)
         {
@@ -1018,21 +1041,21 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
 
             // We cache the fetched object because subsequent Save operation might flush the fetched objects into Pointers.
 
-            IDictionary<string, ParseObject> fetchedObject = CollectFetchedObjects();
+            var fetchedObject = CollectFetchedObjects();
 
-            foreach (KeyValuePair<string, object> pair in serverState)
+            foreach (KeyValuePair<string, object?> pair in serverState)
             {
-                object value = pair.Value;
+                object? value = pair.Value;
 
                 if (value is ParseObject)
                 {
                     // Resolve fetched object.
 
-                    ParseObject entity = value as ParseObject;
+                    ParseObject? entity = value as ParseObject;
 
-                    if (fetchedObject.ContainsKey(entity.ObjectId))
+                    if (fetchedObject != null && entity is not null && entity.ObjectId is not null && fetchedObject.TryGetValue(entity.ObjectId, out ParseObject? fetchedEntity))
                     {
-                        value = fetchedObject[entity.ObjectId];
+                        value = fetchedEntity;
                     }
                 }
                 newServerData[pair.Key] = value;
@@ -1076,8 +1099,8 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     {
         lock (Mutex)
         {
-            EstimatedData.TryGetValue(key, out object oldValue);
-            object newValue = operation.Apply(oldValue, key);
+            EstimatedData.TryGetValue(key, out var oldValue);
+            object? newValue = operation.Apply(oldValue, key);
 
             if (newValue != ParseDeleteOperation.Token)
             {
@@ -1088,8 +1111,8 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
                 EstimatedData.Remove(key);
             }
 
-            bool wasDirty = CurrentOperations.Count > 0;
-            CurrentOperations.TryGetValue(key, out IParseFieldOperation oldOperation);
+            bool wasDirty = CurrentOperations?.Count > 0;
+            CurrentOperations.TryGetValue(key, out IParseFieldOperation? oldOperation);
             IParseFieldOperation newOperation = operation.MergeWithPrevious(oldOperation);
             CurrentOperations[key] = newOperation;
 
@@ -1111,7 +1134,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         {
             EstimatedData.Clear();
 
-            foreach (KeyValuePair<string, object> item in State)
+            foreach (KeyValuePair<string, object?> item in State)
             {
                 EstimatedData.Add(item);
             }
@@ -1125,7 +1148,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         }
     }
 
-    public IDictionary<string, object> ServerDataToJSONObjectForSerialization()
+    public IDictionary<string, object>? ServerDataToJSONObjectForSerialization()
     {
         return PointerOrLocalIdEncoder.Instance.Encode(State.ToDictionary(pair => pair.Key, pair => pair.Value), Services) as IDictionary<string, object>;
     }
@@ -1159,7 +1182,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
 
     public void SetIfDifferent<T>(string key, T value)
     {
-        bool hasCurrent = TryGetValue(key, out T current);
+        bool hasCurrent = TryGetValue(key, out T? current);
 
         if (value == null)
         {
@@ -1183,11 +1206,11 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// <summary>
     /// Pushes new operations onto the queue and returns the current set of operations.
     /// </summary>
-    internal IDictionary<string, IParseFieldOperation> StartSave()
+    internal IDictionary<string, IParseFieldOperation>? StartSave()
     {
         lock (Mutex)
         {
-            IDictionary<string, IParseFieldOperation> currentOperations = CurrentOperations;
+            IDictionary<string, IParseFieldOperation>? currentOperations = CurrentOperations;
             OperationSetQueue.AddLast(new Dictionary<string, IParseFieldOperation>());
             OnPropertyChanged(nameof(IsDirty));
             return currentOperations;
@@ -1243,7 +1266,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// field names. If fieldNames is null, this will notify for all known field-linked
     /// properties (e.g. this happens when we recalculate all estimated data from scratch)
     /// </summary>
-    protected void OnFieldsChanged(IEnumerable<string> fields)
+    protected void OnFieldsChanged(IEnumerable<string>? fields)
     {
 
         if (fields is null)
@@ -1257,7 +1280,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         }
 
         
-        IDictionary<string, string> mappings = Services.ClassController.GetPropertyMappings(ClassName);
+        IDictionary<string, string>? mappings = Services.ClassController.GetPropertyMappings(ClassName);
 
         
         if (mappings == null)
@@ -1285,16 +1308,23 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         PropertyChangedHandler.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
-    protected virtual async Task SaveAsync(Task toAwait, CancellationToken cancellationToken)
+    protected virtual async Task<bool> SaveAsync(Task toAwait, CancellationToken cancellationToken)
     {
         if (!IsDirty)
         {
             // No need to save if the object is not dirty
-            return;
+            return false;
         }
 
+        await toAwait.ConfigureAwait(false);
         // Get the session token and prepare the save operation
+
         var currentOperations = StartSave();
+
+        if (Services is null)
+        {
+            throw new NullReferenceException(nameof(Services));
+        }
         var sessionToken = await Services.GetCurrentSessionToken();
 
         // Perform the deep save asynchronously
@@ -1307,15 +1337,18 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
             var newState = await Services.ObjectController.SaveAsync(State, currentOperations, sessionToken, Services, cancellationToken).ConfigureAwait(false);
             if (newState == null)
             {
-                throw new InvalidOperationException("SaveAsync returned a null state.");
+                throw new InvalidOperationException("SaveAsync returned a null state from server.");
             }
             // Handle successful save with the updated state
             HandleSave(newState);
+
+            return true;
         }
         catch (OperationCanceledException)
         {
             // Handle the cancellation case
             HandleFailedSave(currentOperations);
+            return false;
         }
         
         catch (ParseFailureException ex)
@@ -1344,22 +1377,25 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         this[Services.GetFieldForPropertyName(ClassName, propertyName)] = value;
     }
 
-    void ApplyOperations(IDictionary<string, IParseFieldOperation> operations, IDictionary<string, object> map)
+    void ApplyOperations(IDictionary<string, IParseFieldOperation> operations, IDictionary<string, object?>? map)
     {
         lock (Mutex)
         {
-            foreach (KeyValuePair<string, IParseFieldOperation> pair in operations)
+            if (map is not null)
             {
-                map.TryGetValue(pair.Key, out object oldValue);
-                object newValue = pair.Value.Apply(oldValue, pair.Key);
+                foreach (KeyValuePair<string, IParseFieldOperation> pair in operations)
+                {
+                    map.TryGetValue(pair.Key, out var oldValue);
+                    object? newValue = pair.Value.Apply(oldValue, pair.Key);
 
-                if (newValue != ParseDeleteOperation.Token)
-                {
-                    map[pair.Key] = newValue;
-                }
-                else
-                {
-                    map.Remove(pair.Key);
+                    if (newValue != ParseDeleteOperation.Token)
+                    {
+                        map[pair.Key] = newValue;
+                    }
+                    else
+                    {
+                        map.Remove(pair.Key);
+                    }
                 }
             }
         }
@@ -1392,7 +1428,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     {
         lock (Mutex)
         {
-            return Dirty || CurrentOperations.Count > 0 || considerChildren && HasDirtyChildren;
+            return Dirty || CurrentOperations?.Count > 0 || considerChildren && HasDirtyChildren;
         }
     }
 
@@ -1410,9 +1446,13 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// refreshing or saving.
     /// </summary>
     /// <returns>Map of objectId to ParseObject which have been fetched.</returns>
-    IDictionary<string, ParseObject>? CollectFetchedObjects()
+    IDictionary<string?, ParseObject>? CollectFetchedObjects()
     {
-        return Services?.TraverseObjectDeep(EstimatedData).OfType<ParseObject>().Where(o => o.ObjectId != null && o.IsDataAvailable).GroupBy(o => o.ObjectId).ToDictionary(group => group.Key, group => group.Last());
+        if (true)
+        {
+
+        }
+        return  Services?.TraverseObjectDeep(EstimatedData).OfType<ParseObject>().Where(o => o.ObjectId != null && o.IsDataAvailable).GroupBy(o => o.ObjectId).ToDictionary(group => group.Key, group => group.Last());
     }
 
     IEnumerable<ParseObject>? FindUnsavedChildren()
@@ -1420,7 +1460,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
         return Services?.TraverseObjectDeep(EstimatedData).OfType<ParseObject>().Where(o => o.IsDirty);
     }
 
-    IEnumerator<KeyValuePair<string, object>> IEnumerable<KeyValuePair<string, object>>.GetEnumerator()
+    IEnumerator<KeyValuePair<string, object?>> IEnumerable<KeyValuePair<string, object?>>.GetEnumerator()
     {
         lock (Mutex)
         {
@@ -1439,7 +1479,7 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     /// Sets the objectId without marking dirty.
     /// </summary>
     /// <param name="objectId">The new objectId</param>
-    void SetObjectIdInternal(string objectId)
+    void SetObjectIdInternal(string? objectId)
     {
         lock (Mutex)
         {
@@ -1487,6 +1527,9 @@ public class ParseObject : IEnumerable<KeyValuePair<string, object>>, INotifyPro
     protected IList<T> GetListProperty<T>([CallerMemberName] string? propertyName = null)
     {
         var fieldName = Services?.GetFieldForPropertyName(ClassName, propertyName);
+        
+        if (fieldName == null) Enumerable.Empty<T>();
+
         if (!TryGetValue(fieldName, out IList<T>? list) || list == null)
         {
             list = new List<T>();

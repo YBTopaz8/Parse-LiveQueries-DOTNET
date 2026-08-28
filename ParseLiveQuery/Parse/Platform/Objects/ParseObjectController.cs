@@ -27,7 +27,7 @@ public class ParseObjectController : IParseObjectController
 
     public ParseObjectController(IParseCommandRunner commandRunner, IParseDataDecoder decoder, IServerConnectionData serverConnectionData) => (CommandRunner, Decoder, ServerConnectionData) = (commandRunner, decoder, serverConnectionData);
 
-    public async Task<IObjectState> FetchAsync(IObjectState state, string sessionToken, IServiceHub serviceHub, CancellationToken cancellationToken = default)
+    public async Task<IObjectState?> FetchAsync(IObjectState state, string sessionToken, IServiceHub serviceHub, CancellationToken cancellationToken = default)
     {
         var command = new ParseCommand($"classes/{Uri.EscapeDataString(state.ClassName)}/{Uri.EscapeDataString(state.ObjectId)}", method: "GET", sessionToken: sessionToken, data: null);
 
@@ -36,7 +36,7 @@ public class ParseObjectController : IParseObjectController
     }
 
 
-    public async Task<IObjectState> SaveAsync(IObjectState state, IDictionary<string, IParseFieldOperation> operations, string sessionToken, IServiceHub serviceHub, CancellationToken cancellationToken = default)
+    public async Task<IObjectState?> SaveAsync(IObjectState state, IDictionary<string, IParseFieldOperation>? operations, string sessionToken, IServiceHub serviceHub, CancellationToken cancellationToken = default)
     {
         ParseCommand command;
         if (state.ObjectId == null)
@@ -54,7 +54,7 @@ public class ParseObjectController : IParseObjectController
             command = new ParseCommand(relURI, method, sessionToken: sessionToken, data: dataa);
         }
         var result = await CommandRunner.RunCommandAsync(command, cancellationToken: cancellationToken).ConfigureAwait(false);
-        if (result.Item1 == System.Net.HttpStatusCode.Gone)
+        if (result?.Item1 == System.Net.HttpStatusCode.Gone)
         {
             throw new HttpRequestException("Page does not exist");
         }
@@ -100,12 +100,11 @@ public class ParseObjectController : IParseObjectController
             );
         }).ToList();
 
-        // 2. Execute via the batch endpoint (/batch) to save network overhead
-        var batchTasks = ExecuteBatchRequests(requests, sessionToken, cancellationToken);
-        var batchResults = await Task.WhenAll(batchTasks).ConfigureAwait(false);
+        // 2. Execute via the clean async batch executor
+        var batchResults = await ExecuteBatchRequestsAsync(requests, sessionToken, cancellationToken).ConfigureAwait(false);
 
         // 3. Decode the raw response dictionaries back into IObjectStates
-        var decodedStates = new List<IObjectState>();
+        var decodedStates = new List<IObjectState>(statesList.Count);
         for (int i = 0; i < statesList.Count; i++)
         {
             var resultDict = batchResults[i];
@@ -128,7 +127,6 @@ public class ParseObjectController : IParseObjectController
 
         return decodedStates;
     }
-
 
     public async Task<bool> DeleteAsync(IObjectState state, string sessionToken, CancellationToken cancellationToken = default)
     {
@@ -155,102 +153,117 @@ public class ParseObjectController : IParseObjectController
             return false;
         }
     }
-   
 
-    public IEnumerable<Task> DeleteAllAsync(IEnumerable<IObjectState> states, string sessionToken, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteAllAsync(
+    IEnumerable<IObjectState> states,
+    string sessionToken,
+    CancellationToken cancellationToken = default)
     {
-        return ExecuteBatchRequests(states.Where(item => item.ObjectId is { }).Select(item => new ParseCommand($"classes/{Uri.EscapeDataString(item.ClassName)}/{Uri.EscapeDataString(item.ObjectId)}", method: "DELETE", data: default)).ToList(), sessionToken, cancellationToken).Cast<Task>().ToList();
+        var statesList = states.Where(item => item.ObjectId is not null).ToList();
+        if (statesList.Count == 0)
+            return true;
+
+        // 1. Build the DELETE commands
+        var requests = statesList.Select(item => new ParseCommand(
+            $"classes/{Uri.EscapeDataString(item.ClassName)}/{Uri.EscapeDataString(item.ObjectId)}",
+            method: "DELETE",
+            data: null
+        )).ToList();
+
+        // 2. Execute batches cleanly with async/await
+        var batchResults = await ExecuteBatchRequestsAsync(requests, sessionToken, cancellationToken).ConfigureAwait(false);
+
+        // Returns true if all items in the batch were processed successfully
+        return batchResults.Count == statesList.Count;
     }
 
     int MaximumBatchSize { get; } = 50;
 
-    // TODO (hallucinogen): move this out to a class to be used by Analytics
-
-    internal IList<Task<IDictionary<string, object>>> ExecuteBatchRequests(IList<ParseCommand> requests, string sessionToken, CancellationToken cancellationToken = default)
+    internal async Task<IList<IDictionary<string, object>>> ExecuteBatchRequestsAsync(
+        IList<ParseCommand> requests,
+        string sessionToken,
+        CancellationToken cancellationToken = default)
     {
-        List<Task<IDictionary<string, object>>> tasks = new();
+        var allResults = new List<IDictionary<string, object>>();
 
-
+        // Modern .NET 6+ Chunking
         foreach (var batch in requests.Chunk(MaximumBatchSize))
         {
-            tasks.AddRange(ExecuteBatchRequest(batch.ToList(), sessionToken, cancellationToken));
+            var batchResults = await ExecuteSingleBatchAsync(batch.ToList(), sessionToken, cancellationToken).ConfigureAwait(false);
+            allResults.AddRange(batchResults);
         }
 
-        return tasks;
+        return allResults;
     }
 
-    IList<Task<IDictionary<string, object>>> ExecuteBatchRequest(IList<ParseCommand> requests, string sessionToken, CancellationToken cancellationToken = default)
+    private async Task<IList<IDictionary<string, object>>> ExecuteSingleBatchAsync(
+        IList<ParseCommand> requests,
+        string sessionToken,
+        CancellationToken cancellationToken)
     {
         int batchSize = requests.Count;
+        if (batchSize == 0)
+            return Array.Empty<IDictionary<string, object>>();
 
-        List<Task<IDictionary<string, object>>> tasks = new List<Task<IDictionary<string, object>>> { };
-        List<TaskCompletionSource<IDictionary<string, object>>> completionSources = new List<TaskCompletionSource<IDictionary<string, object>>> { };
-
-        for (int i = 0; i < batchSize; ++i)
+        var encodedRequests = requests.Select(request =>
         {
-            TaskCompletionSource<IDictionary<string, object>> tcs = new TaskCompletionSource<IDictionary<string, object>>();
-
-            completionSources.Add(tcs);
-            tasks.Add(tcs.Task);
-        }
-
-        List<object> encodedRequests = requests.Select(request =>
-        {
-            Dictionary<string, object> results = new Dictionary<string, object>
+            var resultDict = new Dictionary<string, object>
             {
                 ["method"] = request.Method,
-                ["path"] = request is { Path: { }, Resource: { } } ? request.Target.AbsolutePath : new Uri(new Uri(ServerConnectionData.ServerURI), request.Path).AbsolutePath,
+                ["path"] = request is { Path: { }, Resource: { } }
+                    ? request.Target.AbsolutePath
+                    : new Uri(new Uri(ServerConnectionData.ServerURI), request.Path).AbsolutePath,
             };
 
             if (request.DataObject != null)
-                results["body"] = request.DataObject;
+                resultDict["body"] = request.DataObject;
 
-            return results;
-        }).Cast<object>().ToList();
+            return (object)resultDict;
+        }).ToList();
 
-        ParseCommand command = new ParseCommand("batch", method: "POST", sessionToken: sessionToken, data: new Dictionary<string, object> { [nameof(requests)] = encodedRequests });
-
-        CommandRunner.RunCommandAsync(command, cancellationToken: cancellationToken).ContinueWith(task =>
+        var batchCommand = new ParseCommand("batch", method: "POST", sessionToken: sessionToken, data: new Dictionary<string, object>
         {
-            if (task.IsFaulted || task.IsCanceled)
-            {
-                foreach (TaskCompletionSource<IDictionary<string, object>> tcs in completionSources)
-                    if (task.IsFaulted)
-                        tcs.TrySetException(task.Exception);
-                    else if (task.IsCanceled)
-                        tcs.TrySetCanceled();
-
-                return;
-            }
-
-            IList<object>? resultsArray = Conversion.As<IList<object>>(task.Result?.Item2["results"]);
-            int? resultLength = resultsArray?.Count;
-
-            if (resultLength != batchSize)
-            {
-                foreach (TaskCompletionSource<IDictionary<string, object>> completionSource in completionSources)
-                    completionSource.TrySetException(new InvalidOperationException($"Batch command result count expected: {batchSize} but was: {resultLength}."));
-
-                return;
-            }
-
-            for (int i = 0; i < batchSize; ++i)
-            {
-                Dictionary<string, object>? result = resultsArray[i] as Dictionary<string, object>;
-                TaskCompletionSource<IDictionary<string, object>> target = completionSources[i];
-
-                if (result.ContainsKey("success"))
-                    target.TrySetResult(result["success"] as IDictionary<string, object>);
-                else if (result.ContainsKey("error"))
-                {
-                    IDictionary<string, object> error = result["error"] as IDictionary<string, object>;
-                    target.TrySetException(new ParseFailureException((ParseFailureException.ErrorCode) (long) error["code"], error[nameof(error)] as string));
-                }
-                else
-                    target.TrySetException(new InvalidOperationException("Invalid batch command response."));
-            }
+            ["requests"] = encodedRequests
         });
 
-        return tasks;
+        var response = await CommandRunner.RunCommandAsync(batchCommand, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        if (response.Item2 == null || !response.Item2.TryGetValue("results", out var rawResults) || rawResults is not IList<object> resultsArray)
+        {
+            throw new ParseFailureException(ParseFailureException.ErrorCode.OtherCause, "Invalid batch response received from Parse Server.");
+        }
+
+        if (resultsArray.Count != batchSize)
+        {
+            throw new InvalidOperationException($"Batch command expected {batchSize} results, but received {resultsArray.Count}.");
+        }
+
+        var output = new List<IDictionary<string, object>>(batchSize);
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            if (resultsArray[i] is not IDictionary<string, object> resultDict)
+            {
+                throw new InvalidOperationException("Invalid item format in batch response.");
+            }
+
+            if (resultDict.TryGetValue("success", out var successObj) && successObj is IDictionary<string, object> successDict)
+            {
+                output.Add(successDict);
+            }
+            else if (resultDict.TryGetValue("error", out var errorObj) && errorObj is IDictionary<string, object> errorDict)
+            {
+                var code = errorDict.TryGetValue("code", out var c) ? Convert.ToInt64(c) : (long)ParseFailureException.ErrorCode.OtherCause;
+                var message = errorDict.TryGetValue("error", out var msg) ? msg?.ToString() : "Unknown batch error occurred.";
+                throw new ParseFailureException((ParseFailureException.ErrorCode)code, message);
+            }
+            else
+            {
+                // Handles simple cases like { "success": true }
+                output.Add(resultDict);
+            }
+        }
+
+        return output;
     }
 }

@@ -36,7 +36,7 @@ public class MutableObjectState : IObjectState
         }
     }
 
-    public event PropertyChangedEventHandler PropertyChanged;
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     protected virtual void OnPropertyChanged(string propertyName)
     {
@@ -124,7 +124,7 @@ public class MutableObjectState : IObjectState
         };
     }
 
-    IEnumerator<KeyValuePair<string, object>> IEnumerable<KeyValuePair<string, object>>.GetEnumerator()
+    IEnumerator<KeyValuePair<string, object?>> IEnumerable<KeyValuePair<string, object?>>.GetEnumerator()
     {
         return ServerData.GetEnumerator();
     }
@@ -136,7 +136,7 @@ public class MutableObjectState : IObjectState
 
     public static MutableObjectState? Decode(object data)
     {
-        if (data is IDictionary<string, object> dictionary)
+        if (data is IDictionary<string, object?> dictionary)
         {
             try
             {
@@ -148,9 +148,10 @@ public class MutableObjectState : IObjectState
                     UpdatedAt = dictionary.ContainsKey("updatedAt") ? DecodeDateTime(dictionary["updatedAt"]) : null,
                     IsNew = dictionary.ContainsKey("isNew") && Convert.ToBoolean(dictionary["isNew"]),
                     ServerData = dictionary
-                        .Where(pair => IsValidField(pair.Key, pair.Value))
-                        .ToDictionary(pair => pair.Key, pair => pair.Value)
+                            .Where(pair => IsValidField(pair.Key, pair.Value))
+                            .ToDictionary(pair => pair.Key, pair => pair.Value)
                 };
+
 
                 return state;
             }
@@ -196,7 +197,7 @@ public class MutableObjectState : IObjectState
         return null;
     }
 
-    private static bool IsValidField(string key, object value)
+    private static bool IsValidField(string key, object? value=null)
     {
         // Add any validation logic for fields if needed
         return !string.IsNullOrEmpty(key); // Example: Ignore null/empty keys
