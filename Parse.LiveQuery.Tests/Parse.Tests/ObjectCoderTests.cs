@@ -106,7 +106,7 @@ public class ObjectCoderTests
    
     [TestMethod]
     [Description("Tests that ExecuteBatchRequests correctly handles empty list.")]
-    public void ExecuteBatchRequests_EmptyList()
+    public async Task ExecuteBatchRequests_EmptyList()
     {
         var mockCommandRunner = new Mock<IParseCommandRunner>();
         var mockDecoder = new Mock<IParseDataDecoder>();
@@ -114,7 +114,7 @@ public class ObjectCoderTests
         ParseObjectController controller = new ParseObjectController(mockCommandRunner.Object, mockDecoder.Object, new ServerConnectionData());
         IList<ParseCommand> emptyList = new List<ParseCommand>();
 
-        var task = controller.ExecuteBatchRequests(emptyList, "session", CancellationToken.None);
+        var task = await controller.ExecuteBatchRequestsAsync(emptyList, "session", CancellationToken.None);
 
         Assert.AreEqual(0, task.Count);
 

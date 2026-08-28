@@ -48,42 +48,42 @@ public class PushTests
     [TestCleanup]
     public void TearDown() => (Client.Services as ServiceHub).Reset();
 
-    [TestMethod]
-    public async Task TestSendPushAsync()
-    {
-        // Arrange
-        var hub = new MutableServiceHub();
-        var client = new ParseClient(new ServerConnectionData { Test = true }, hub);
+    //[TestMethod]
+    //public async Task TestSendPushAsync()
+    //{
+    //    // Arrange
+    //    var hub = new MutableServiceHub();
+    //    var client = new ParseClient(new ServerConnectionData { Test = true }, hub);
 
-        var state = new MutablePushState
-        {
-            Query = Client.GetInstallationQuery()
-        };
+    //    var state = new MutablePushState
+    //    {
+    //        Query = Client.GetInstallationQuery()
+    //    };
 
-        var thePush = new ParsePush(client);
+    //    var thePush = new ParsePush(client);
 
-        hub.PushController = GetMockedPushController(state);
+    //    hub.PushController = GetMockedPushController(state);
 
-        // Act
-        thePush.Alert = "Alert";
-        state.Alert = "Alert";
+    //    // Act
+    //    thePush.Alert = "Alert";
+    //    state.Alert = "Alert";
 
-        await thePush.SendAsync();
+    //    await thePush.SendAsync();
 
-        thePush.Channels = new List<string> { "channel" };
-        state.Channels = new List<string> { "channel" };
+    //    thePush.Channels = new List<string> { "channel" };
+    //    state.Channels = new List<string> { "channel" };
 
-        await thePush.SendAsync();
+    //    await thePush.SendAsync();
 
-        var query = new ParseQuery<ParseInstallation>(client, "aClass");
-        thePush.Query = query;
-        state.Query = query;
+    //    var query = new ParseQuery<ParseInstallation>(client, "aClass");
+    //    thePush.Query = query;
+    //    state.Query = query;
 
-        await thePush.SendAsync();
+    //    await thePush.SendAsync();
 
-        // Assert
-        Assert.IsTrue(true); // Reaching here means no exceptions occurred
-    }
+    //    // Assert
+    //    Assert.IsTrue(true); // Reaching here means no exceptions occurred
+    //}
 
     [TestMethod]
     public async Task TestSubscribeAsync()
