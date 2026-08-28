@@ -42,6 +42,6 @@ public interface IParseFieldOperation: IJsonConvertible
     /// <returns>The new value for the field.</returns>
     object? Apply(object? oldValue, string key);
 
-    object Value { get; } // Added property to expose operation value
+    object? Value { get; } // Added property to expose operation value
 
 }
