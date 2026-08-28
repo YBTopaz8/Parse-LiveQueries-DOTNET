@@ -134,27 +134,37 @@ public partial class ParseUser : ParseObject
 
             return usr;
         }
-        catch
+        catch (Exception ex)
         {
             
             HandleFailedSave(currentOperations);
-            throw;
+            throw new InvalidOperationException($"Cannot save user {ex.Message}");
+
         }
     }
 
 
-    protected override async Task SaveAsync(Task toAwait, CancellationToken cancellationToken)
+    protected override async Task<bool> SaveAsync(Task toAwait, CancellationToken cancellationToken)
     {
-        await toAwait.ConfigureAwait(false);
-
-        if (ObjectId is null)
-            throw new InvalidOperationException("You must call SignUpAsync before calling SaveAsync.");
-
-        await base.SaveAsync(toAwait, cancellationToken).ConfigureAwait(false);
-
-        if (Services.CurrentUserController.IsCurrent(this))
+        try
         {
-            await Services.SaveCurrentUserAsync(this, cancellationToken).ConfigureAwait(false);
+            await toAwait.ConfigureAwait(false);
+
+            if (ObjectId is null)
+                throw new InvalidOperationException("You must call SignUpAsync before calling SaveAsync.");
+
+            await base.SaveAsync(toAwait, cancellationToken).ConfigureAwait(false);
+
+            if (Services.CurrentUserController.IsCurrent(this))
+            {
+                await Services.SaveCurrentUserAsync(this, cancellationToken).ConfigureAwait(false);
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+
+            throw new InvalidOperationException(ex.Message);
         }
     }
 
@@ -194,14 +204,14 @@ public partial class ParseUser : ParseObject
         await SetSessionTokenAsync(newSessionToken, cancellationToken).ConfigureAwait(false);
     }
  
-    public IDictionary<string, IDictionary<string, object>> AuthData
+    public IDictionary<string, IDictionary<string, object>?>? AuthData
     {
 
         get
         {
             if (ContainsKey("authData"))
             {
-                return this["authData"] as IDictionary<string, IDictionary<string, object>>;
+                return this["authData"] as IDictionary<string, IDictionary<string, object>?>;
             }
             else
                 return null;
@@ -231,11 +241,11 @@ public partial class ParseUser : ParseObject
         }
     }
 
-    internal async Task LinkWithAsync(string authType, IDictionary<string, object> data, CancellationToken cancellationToken)
+    internal async Task LinkWithAsync(string authType, IDictionary<string, object>? data, CancellationToken cancellationToken)
     {
         lock (Mutex)
         {
-            AuthData ??= new Dictionary<string, IDictionary<string, object>>();
+            AuthData ??= new Dictionary<string, IDictionary<string, object>?>();
             AuthData[authType] = data;
         }
 
@@ -265,7 +275,7 @@ public partial class ParseUser : ParseObject
         }
     }
 
-    internal static IParseAuthenticationProvider GetProvider(string providerName)
+    internal static IParseAuthenticationProvider? GetProvider(string providerName)
     {
         return Authenticators.TryGetValue(providerName, out var provider) ? provider : null;
     }
@@ -288,7 +298,7 @@ public partial class ParseUser : ParseObject
         }
     }
 
-    internal void SynchronizeAuthData(IParseAuthenticationProvider provider)
+    internal void SynchronizeAuthData(IParseAuthenticationProvider? provider)
     {
         if (provider == null || AuthData == null)
             return;

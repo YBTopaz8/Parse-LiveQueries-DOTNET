@@ -114,7 +114,7 @@ public class ParseACL : IJsonConvertible
         SetWriteAccess(owner, true);
     }
 
-    public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = default)
+    public IDictionary<string, object> ConvertToJSON(IServiceHub? serviceHub = default)
     {
         return readers.Union(writers).ToDictionary(
             user => user,

@@ -40,7 +40,7 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
     /// </summary>
     public static ParseClient Instance { get; private set; }
 
-    internal static string Version => typeof(ParseClient)?.Assembly?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? typeof(ParseClient)?.Assembly?.GetName()?.Version?.ToString();
+    internal static string? Version => typeof(ParseClient)?.Assembly?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? typeof(ParseClient)?.Assembly?.GetName()?.Version?.ToString();
 
     /// <summary>
     /// Services that provide essential functionality.
@@ -57,7 +57,7 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
     /// <param name="key">The .NET Key provided in the Parse dashboard.</param>
     /// <param name="serviceHub">A service hub to override internal services and thereby make the Parse SDK operate in a custom manner.</param>
     /// <param name="configurators">A set of <see cref="IServiceHubMutator"/> implementation instances to tweak the behaviour of the SDK.</param>
-    public ParseClient(string applicationID, string serverURI, string key, IServiceHub serviceHub = default, params IServiceHubMutator[] configurators) : this(new ServerConnectionData { ApplicationID = applicationID, ServerURI = serverURI, Key = key }, serviceHub, configurators) { }
+    public ParseClient(string applicationID, string serverURI, string key, IServiceHub? serviceHub = default, params IServiceHubMutator[] configurators) : this(new ServerConnectionData { ApplicationID = applicationID, ServerURI = serverURI, Key = key }, serviceHub, configurators) { }
 
     /// <summary>
     /// Creates a new <see cref="ParseClient"/> and authenticates it as belonging to your application. This class is a hub for interacting with the SDK. The recommended way to use this class on client applications is to instantiate it, then call <see cref="Publicize"/> on it in your application entry point. This allows you to access <see cref="Instance"/>.
@@ -65,7 +65,7 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
     /// <param name="configuration">The configuration to initialize Parse with.</param>
     /// <param name="serviceHub">A service hub to override internal services and thereby make the Parse SDK operate in a custom manner.</param>
     /// <param name="configurators">A set of <see cref="IServiceHubMutator"/> implementation instances to tweak the behaviour of the SDK.</param>
-    public ParseClient(IServerConnectionData configuration, IServiceHub serviceHub = default, params IServiceHubMutator[] configurators)
+    public ParseClient(IServerConnectionData configuration, IServiceHub? serviceHub = default, params IServiceHubMutator[] configurators)
     {
         Services = serviceHub is { } ? new OrchestrationServiceHub { Custom = serviceHub, Default = new ServiceHub { ServerConnectionData = GenerateServerConnectionData() } } : new ServiceHub { ServerConnectionData = GenerateServerConnectionData() } as IServiceHub;
 
@@ -92,7 +92,8 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
             Services = serviceHub switch
             {
                 IMutableServiceHub { } mutableServiceHub => BuildHub((Hub: mutableServiceHub, mutableServiceHub.ServerConnectionData = serviceHub.ServerConnectionData ?? Services.ServerConnectionData).Hub, Services, configurators),
-                { } => BuildHub(default, Services, configurators)
+                { } => BuildHub(default, Services, configurators),
+                _ => throw new NotImplementedException()
             };
         }
 
@@ -145,9 +146,9 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
         return String.Join("&", (from pair in parameters let valueString = pair.Value as string select $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(String.IsNullOrEmpty(valueString) ? JsonUtilities.Encode(pair.Value) : valueString)}").ToArray());
     }
 
-    internal static IDictionary<string, string> DecodeQueryString(string queryString)
+    internal static IDictionary<string, string?> DecodeQueryString(string queryString)
     {
-        Dictionary<string, string> query = new Dictionary<string, string> { };
+        Dictionary<string, string?> query = new Dictionary<string, string?> { };
 
         foreach (string pair in queryString.Split('&'))
         {
@@ -158,9 +159,9 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
         return query;
     }
 
-    internal static IDictionary<string, object> DeserializeJsonString(string jsonData)
+    internal static IDictionary<string, object?>? DeserializeJsonString(string jsonData)
     {
-        return JsonUtilities.Parse(jsonData) as IDictionary<string, object>;
+        return JsonUtilities.Parse(jsonData) as IDictionary<string, object?>;
     }
 
     internal static string SerializeJsonString(IDictionary<string, object> jsonData)
@@ -168,7 +169,7 @@ public class ParseClient : CustomServiceHub, IServiceHubComposer
         return JsonUtilities.Encode(jsonData);
     }
 
-    public IServiceHub BuildHub(IMutableServiceHub target = default, IServiceHub extension = default, params IServiceHubMutator[] configurators)
+    public IServiceHub BuildHub(IMutableServiceHub? target = default, IServiceHub? extension = default, params IServiceHubMutator[] configurators)
     {
         OrchestrationServiceHub orchestrationServiceHub = new OrchestrationServiceHub { Custom = target ??= new MutableServiceHub { }, Default = extension ?? new ServiceHub { } };
 

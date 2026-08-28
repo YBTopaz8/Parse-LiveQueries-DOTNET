@@ -112,10 +112,10 @@ public partial class ParseInstallation : ParseObject
     /// Gets the locale identifier in the format: [language code]-[COUNTRY CODE].
     /// </summary>
     /// <returns>The locale identifier in the format: [language code]-[COUNTRY CODE].</returns>
-    private string GetLocaleIdentifier()
+    private string? GetLocaleIdentifier()
     {
-        string languageCode = null;
-        string countryCode = null;
+        string? languageCode = null;
+        string? countryCode = null;
 
         if (CultureInfo.CurrentCulture != null)
         {
@@ -125,13 +125,13 @@ public partial class ParseInstallation : ParseObject
         {
             countryCode = RegionInfo.CurrentRegion.TwoLetterISORegionName;
         }
-        if (String.IsNullOrEmpty(countryCode))
+        if (string.IsNullOrEmpty(countryCode))
         {
             return languageCode;
         }
         else
         {
-            return String.Format("{0}-{1}", languageCode, countryCode);
+            return string.Format("{0}-{1}", languageCode, countryCode);
         }
     }
 
@@ -168,7 +168,7 @@ public partial class ParseInstallation : ParseObject
         return !ImmutableKeys.Contains(key);
     }
 
-    protected override async Task SaveAsync(Task toAwait, CancellationToken cancellationToken)
+    protected override async Task<bool> SaveAsync(Task toAwait, CancellationToken cancellationToken)
     {
         if (Services.CurrentInstallationController.IsCurrent(this))
 
@@ -188,18 +188,21 @@ public partial class ParseInstallation : ParseObject
         // Wait for the platform task, then proceed with saving the main task.
         try
         {
-            _ = platformHookTask.Safe().ConfigureAwait(false);
+            await platformHookTask.Safe().ConfigureAwait(false);
             await base.SaveAsync(toAwait, cancellationToken).ConfigureAwait(false);
             if (!Services.CurrentInstallationController.IsCurrent(this))
             {
-                _ = Services.CurrentInstallationController.SetAsync(this, cancellationToken).ConfigureAwait(false);
+                await Services.CurrentInstallationController.SetAsync(this, cancellationToken).ConfigureAwait(false);
             }
+
+            return true;
         }
         catch (Exception ex)
         {
             // Log or handle the exception
             // You can log it or rethrow if necessary
             Console.Error.WriteLine(ex);
+            throw new InvalidOperationException(ex.Message);
         }
 
     }
