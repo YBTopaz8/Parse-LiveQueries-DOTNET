@@ -13,7 +13,7 @@ public static class InternalExtensions
     /// <summary>
     /// Ensures a task (even null) is awaitable.
     /// </summary>
-    public static Task<T> Safe<T>(this Task<T> task) =>
+    public static Task<T?> Safe<T>(this Task<T?> task) =>
         task ?? Task.FromResult(default(T));
 
     /// <summary>
@@ -27,14 +27,16 @@ public static class InternalExtensions
     /// <summary>
     /// Gets the value from a dictionary or returns the default value if the key is not found.
     /// </summary>
-    public static TValue GetOrDefault<TKey, TValue>(this IDictionary<TKey, TValue> self, TKey key, TValue defaultValue) =>
+    public static TValue? GetOrDefault<TKey, TValue>(this IDictionary<TKey, TValue> self, TKey key, TValue? defaultValue) =>
         self.TryGetValue(key, out var value) ? value : defaultValue;
 
     /// <summary>
     /// Compares two collections for equality.
     /// </summary>
-    public static bool CollectionsEqual<T>(this IEnumerable<T> a, IEnumerable<T> b) =>
-        ReferenceEquals(a, b) || (a != null && b != null && a.SequenceEqual(b));
+    public static bool CollectionsEqual<T>(this IEnumerable<T>? a, IEnumerable<T>? b)
+    {
+        return ReferenceEquals(a, b) || (a != null && b != null && a.SequenceEqual(b));
+    }
 
     /// <summary>
     /// Executes a continuation on a task that returns a result on success.
@@ -44,7 +46,9 @@ public static class InternalExtensions
         if (task.IsFaulted)
         {
             var ex = task.Exception?.Flatten();
-            ExceptionDispatchInfo.Capture(ex?.InnerExceptions[0] ?? ex).Throw();
+            if (ex is null)
+                throw new InvalidOperationException("Task is faulted but exception is null.");
+            ExceptionDispatchInfo.Capture(ex.InnerExceptions[0] ?? ex).Throw();
         }
         else if (task.IsCanceled)
         {
@@ -67,7 +71,9 @@ public static class InternalExtensions
         if (task.IsFaulted)
         {
             var ex = task.Exception?.Flatten();
-            ExceptionDispatchInfo.Capture(ex?.InnerExceptions[0] ?? ex).Throw();
+            if (ex is null)
+                throw new InvalidOperationException("Task is faulted but exception is null.");
+            ExceptionDispatchInfo.Capture(ex.InnerExceptions[0] ?? ex).Throw();
         }
         else if (task.IsCanceled)
         {
@@ -89,7 +95,10 @@ public static class InternalExtensions
         if (task.IsFaulted)
         {
             var ex = task.Exception?.Flatten();
-            ExceptionDispatchInfo.Capture(ex?.InnerExceptions[0] ?? ex).Throw();
+            if (ex is null)
+                throw new InvalidOperationException("Task is faulted but exception is null.");
+            ExceptionDispatchInfo.Capture(ex.InnerExceptions[0] ?? ex).Throw();
+        
         }
         else if (task.IsCanceled)
         {
@@ -103,16 +112,18 @@ public static class InternalExtensions
     /// <summary>
     /// Executes a continuation on a task and returns void, for tasks with result.
     /// </summary>
-    public static async Task OnSuccess<TIn>(this Task<TIn> task, Action<Task<TIn>> continuation)
+    public static async Task OnSuccess<TIn>(this Task<TIn?> task, Action<Task<TIn?>> continuation)
     {
         if (task.IsFaulted)
         {
             var ex = task.Exception?.Flatten();
-            ExceptionDispatchInfo.Capture(ex?.InnerExceptions[0] ?? ex).Throw();
+            if(ex is null)
+                throw new InvalidOperationException("Task is faulted but exception is null.");
+            ExceptionDispatchInfo.Capture(ex.InnerExceptions[0] ?? ex).Throw();
         }
         else if (task.IsCanceled)
         {
-            task = Task.FromResult<TIn>(default); // Handle canceled task by returning a completed Task<TIn>
+            task = Task.FromResult<TIn?>(default); // Handle canceled task by returning a completed Task<TIn>
         }
 
         continuation(task);

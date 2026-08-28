@@ -20,8 +20,8 @@ namespace Parse.Infrastructure.Data;
 /// <seealso cref="ParseDataDecoder"/>
 public abstract class ParseDataEncoder
 {
-    private IServiceHub Services { get; }
-    private IParseObjectClassController ClassController => Services.ClassController;
+    private IServiceHub? Services { get; }
+    private IParseObjectClassController? ClassController => Services?.ClassController;
 
 
 
@@ -77,7 +77,7 @@ public abstract class ParseDataEncoder
     /// <summary>
     /// Encodes a given value into a JSON-compatible structure.
     /// </summary>
-    public object? Encode(object value, IServiceHub serviceHub)
+    public object? Encode(object? value, IServiceHub? serviceHub)
     {
         if (value == null)
             return null;
@@ -163,9 +163,9 @@ public abstract class ParseDataEncoder
     //// <summary>
     /// Encodes a dictionary into a JSON-compatible structure.
     /// </summary>
-    private object EncodeDictionary(IDictionary<string, object> dictionary, IServiceHub serviceHub)
+    private object EncodeDictionary(IDictionary<string, object> dictionary, IServiceHub? serviceHub)
     {
-        var encodedDictionary = new Dictionary<string, object>();
+        var encodedDictionary = new Dictionary<string, object?>();
         if (dictionary.Count < 1)
         {
             return encodedDictionary;
@@ -181,6 +181,7 @@ public abstract class ParseDataEncoder
             else
             {
                 // Handle other types by encoding them recursively
+                
                 encodedDictionary[pair.Key] = Encode(pair.Value, serviceHub);
             }
         }
@@ -212,7 +213,7 @@ public abstract class ParseDataEncoder
     /// <summary>
     /// Encodes a list into a JSON-compatible structure.
     /// </summary>
-    private object EncodeList(IEnumerable<object> list, IServiceHub serviceHub)
+    private object EncodeList(IEnumerable<object> list, IServiceHub? serviceHub)
     {
         
         int capacity = list is ICollection<object> col ? col.Count : 8;
