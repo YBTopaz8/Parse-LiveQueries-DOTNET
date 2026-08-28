@@ -29,39 +29,42 @@ public class ParseAddUniqueOperation : IParseFieldOperation
         };
     }
 
-    public object Apply(object oldValue, string key)
+    public object? Apply(object? oldValue, string key)
     {
         if (oldValue == null)
         {
             return Data.ToList(); // If no previous value, return the current data
         }
 
-        var result = Conversion.To<IList<object>>(oldValue).ToList();
+        var result = Conversion.To<IList<object>>(oldValue)?.ToList();
         var comparer = ParseFieldOperations.ParseObjectComparer;
-
-        foreach (var target in Data)
+        if (result is not null)
         {
-            // Add only if not already present, replace if an equivalent exists
-            if (result.FirstOrDefault(reference => comparer.Equals(target, reference)) is { } matched)
+
+
+            foreach (var target in Data)
             {
-                result[result.IndexOf(matched)] = target;
-            }
-            else
-            {
-                result.Add(target);
+                // Add only if not already present, replace if an equivalent exists
+                if (result.FirstOrDefault(reference => comparer.Equals(target, reference)) is { } matched)
+                {
+                    result[result.IndexOf(matched)] = target;
+                }
+                else
+                {
+                    result.Add(target);
+                }
             }
         }
-
         return result;
     }
 
-    public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = default)
+    public IDictionary<string, object?> ConvertToJSON(IServiceHub? serviceHub = default)
     {
         // Use your centralized encoder instead of duplicating logic!
         var encoder = PointerOrLocalIdEncoder.Instance;
         var encodedObjects = Data.Select(obj => encoder.Encode(obj, serviceHub)).ToList();
 
-        return new Dictionary<string, object>
+        return new Dictionary<string, object?>
         {
             ["__op"] = "AddUnique",
             ["objects"] = encodedObjects
@@ -74,7 +77,7 @@ public class ParseAddUniqueOperation : IParseFieldOperation
         return obj switch
         {
             // Handle pointers
-            ParseObject parseObj => new Dictionary<string, object>
+            ParseObject parseObj => new Dictionary<string, object?>
             {
                 ["__type"] = "Pointer",
                 ["className"] = parseObj.ClassName,

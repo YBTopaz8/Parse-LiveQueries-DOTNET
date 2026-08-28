@@ -12,10 +12,10 @@ namespace Parse.Infrastructure.Control;
 public class ParseAddOperation : IParseFieldOperation
 {
     // Encapsulated the data to be added as a read-only collection
-    ReadOnlyCollection<object> Data { get; }
+    ReadOnlyCollection<object?> Data { get; }
 
-    public ParseAddOperation(IEnumerable<object> objects) =>
-        Data = new ReadOnlyCollection<object>(objects.Distinct().ToList()); // Ensures no duplicates within this operation
+    public ParseAddOperation(IEnumerable<object?> objects) =>
+        Data = new ReadOnlyCollection<object?>(objects.Distinct().ToList()); // Ensures no duplicates within this operation
 
     public IParseFieldOperation MergeWithPrevious(IParseFieldOperation previous)
     {
@@ -39,18 +39,25 @@ public class ParseAddOperation : IParseFieldOperation
         }
 
         var result = Conversion.To<IList<object>>(oldValue)?.ToList();
+        if (result is null)
+            return default;
+
         foreach (var obj in Data)
         {
-            if (!result.Contains(obj)) // Ensure no duplicates
+            if (obj is not null)
             {
-                result.Add(obj);
+                if (!result.Contains(obj)) // Ensure no duplicates
+                {
+                    result.Add(obj);
+                }
             }
+            
         }
         return result;
     }
 
 
-    public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = default)
+    public IDictionary<string, object> ConvertToJSON(IServiceHub? serviceHub = default)
     {
         // Use your centralized encoder instead of duplicating logic!
         var encoder = PointerOrLocalIdEncoder.Instance;
@@ -118,7 +125,7 @@ public class ParseAddOperation : IParseFieldOperation
         };
     }
 
-    public IEnumerable<object> Objects => Data;
+    public IEnumerable<object?> Objects => Data;
 
     // Added Value property to return the underlying data
     public object Value => Data.ToList();

@@ -8,14 +8,14 @@ namespace Parse.Infrastructure.Control;
 
 public class ParseSetOperation : IParseFieldOperation
 {
-    public object Value { get; private set; }
+    public object? Value { get; private set; }
 
-    public ParseSetOperation(object value)
+    public ParseSetOperation(object? value)
     {
         Value = value;
     }
 
-    public IDictionary<string, object> ConvertToJSON(IServiceHub serviceHub = default)
+    public IDictionary<string, object?> ConvertToJSON(IServiceHub? serviceHub = default)
     {
         if (serviceHub == null)
         {
@@ -25,7 +25,7 @@ public class ParseSetOperation : IParseFieldOperation
         // Just let the encoder do its job
         var encodedValue = PointerOrLocalIdEncoder.Instance.Encode(Value, serviceHub);
 
-        if (encodedValue is IDictionary<string, object> dictionary)
+        if (encodedValue is IDictionary<string, object?> dictionary)
         {
             return dictionary;
         }
@@ -36,7 +36,7 @@ public class ParseSetOperation : IParseFieldOperation
         }
 
         // Fallback for primitive types/strings to avoid nesting
-        return new Dictionary<string, object> { ["value"] = Value };
+        return new Dictionary<string, object?> { ["value"] = Value };
     }
 
     public IParseFieldOperation MergeWithPrevious(IParseFieldOperation previous)
@@ -44,12 +44,12 @@ public class ParseSetOperation : IParseFieldOperation
         return this; // Set always overrides
     }
 
-    public object Apply(object oldValue, string key)
+    public object? Apply(object? oldValue, string key)
     {
         return Value;
     }
 
-    public object ConvertValueToJSON(IServiceHub serviceHub = null)
+    public object? ConvertValueToJSON(IServiceHub? serviceHub = null)
     {
         if (serviceHub == null)
         {
