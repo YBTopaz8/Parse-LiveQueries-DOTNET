@@ -264,7 +264,7 @@ public class ParseFailureException : Exception
         BadRequest = 400
     }
 
-    internal ParseFailureException(ErrorCode code, string message, Exception cause = null) : base(message, cause) => Code = code;
+    internal ParseFailureException(ErrorCode code, string message, Exception? cause = null) : base(message, cause) => Code = code;
 
     /// <summary>
     /// The Parse error code associated with the exception.
@@ -274,5 +274,5 @@ public class ParseFailureException : Exception
 public class ParseErrorPayload
 {
     public int code { get; set; }
-    public string error { get; set; }
+    public string? error { get; set; }
 }
