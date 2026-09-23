@@ -499,27 +499,30 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
                 if (_subscriptions.TryGetValue(requestId, out var subscription))
                 {
-
-
-                    var jsonElement = (JsonElement?)jsonObject["object"];
-
-
-
-                    var objectData = JsonElementToDictionary(jsonElement);
+                    IDictionary<string, object?>? objectData = jsonObject["object"] switch
+                    {
+                        IDictionary<string, object?> dict => dict,
+                        JsonElement element => JsonElementToDictionary(element),
+                        _ => null
+                    };
 
                     var obj = ParseClientInstance.Decoder.Decode(objectData, ParseClientInstance);
 
-                    if (jsonObject.TryGetValue("original", out var message))
-
+                    if (jsonObject.TryGetValue("original", out var originalVal) && originalVal is not null)
                     {
-                        var originalObjectData = JsonElementToDictionary((JsonElement?)message);
+                        IDictionary<string, object?>? originalObjectData = originalVal switch
+                        {
+                            IDictionary<string, object?> dict => dict,
+                            JsonElement element => JsonElementToDictionary(element),
+                            _ => null
+                        };
 
                         var originalParseObj = ParseClientInstance.Decoder.Decode(originalObjectData, ParseClientInstance);
 
                         subscription.DidReceive(subscription.QueryObj, subscriptionEvent, obj as ParseObject, originalParseObj as ParseObject);
-
                         return;
                     }
+
 
 
                     subscription.DidReceive(subscription.QueryObj, subscriptionEvent, obj as ParseObject);
@@ -539,20 +542,14 @@ public class ParseLiveQueryClient :IAsyncDisposable
         try
         {
 
-            if (jsonObject is not null)
+            if (jsonObject is not null && jsonObject.TryGetValue("requestId", out var requestIdObj) && requestIdObj is not null)
             {
-                var idd = jsonObject.TryGetValue("requestId", out var requestIdObj);
-                if (idd)
+                int id = Convert.ToInt32(requestIdObj);
+
+                if (_subscriptions.TryGetValue(id, out var subscription))
                 {
-                    var reqId = Convert.ToInt32(requestIdObj);
-
-
-                    _subscriptions.TryGetValue(reqId, out var subscription);
-
-
-                    subscription?.DidSubscribe(subscription.QueryObj);
-                    _subscribedSubject.OnNext((reqId, subscription));
-
+                    subscription.DidSubscribe(subscription.QueryObj);
+                    _subscribedSubject.OnNext((id, subscription));
                 }
             }
         }
@@ -566,13 +563,12 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
     private void HandleUnsubscribedEvent(Dictionary<string, object?>? jsonObject)
     {
-        if (jsonObject is not null)
+        if (jsonObject is not null && jsonObject.TryGetValue("requestId", out var requestIdObj) && requestIdObj is not null)
         {
-            if (jsonObject.TryGetValue("requestId", out var requestIdObj) 
-            &&
-            requestIdObj is int requestId 
-            &&
-            _subscriptions.TryRemove(requestId, out var subscription))
+
+            int requestId = Convert.ToInt32(requestIdObj);
+
+            if (_subscriptions.TryRemove(requestId, out var subscription))
             {
                 if (subscription != null && !string.IsNullOrEmpty(subscription.Name))
                 {
@@ -582,6 +578,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
                 _unsubscribedSubject.OnNext((requestId, subscription));
             }
         }
+    
     }
 
 
@@ -639,28 +636,21 @@ public class ParseLiveQueryClient :IAsyncDisposable
     {
         if (jsonObject is not null)
         {
-            if (jsonObject.TryGetValue("requestId", out var requestIdObj) && requestIdObj is int requestId)
-            {
+            int code = jsonObject.TryGetValue("code", out var codeObj) && codeObj != null ? Convert.ToInt32(codeObj) : 0;
+            string? error = jsonObject.TryGetValue("error", out var errObj) ? errObj?.ToString() : null;
+            bool? reconnect = jsonObject.TryGetValue("reconnect", out var recObj) && recObj != null ? Convert.ToBoolean(recObj) : null;
+            LiveQueryException exception = new LiveQueryException.ServerReportedException(code, error, reconnect);
 
+            if (jsonObject.TryGetValue("requestId", out var requestIdObj) && requestIdObj is not null)
+            {
+                int requestId = Convert.ToInt32(requestIdObj);
                 if (_subscriptions.TryGetValue(requestId, out var subscription))
                 {
-
-                    int code = Convert.ToInt32(jsonObject["code"]);
-                    string? error = (string?)jsonObject["error"];
-                    bool? reconnect = (bool?)jsonObject["reconnect"];
-                    LiveQueryException exception = new LiveQueryException.ServerReportedException(code, error, reconnect);
                     subscription?.DidEncounter(subscription?.QueryObj, exception);
-                    _errorSubject.OnNext(exception);
                 }
             }
-            else
-            {
-                int code = Convert.ToInt32(jsonObject["code"]);
-                string? error = (string?)jsonObject["error"];
-                bool? reconnect = (bool?)jsonObject["reconnect"];
-                LiveQueryException exception = new LiveQueryException.ServerReportedException(code, error, reconnect);
-                _errorSubject.OnNext(exception);
-            }
+
+            _errorSubject.OnNext(exception);
         }
     }
 

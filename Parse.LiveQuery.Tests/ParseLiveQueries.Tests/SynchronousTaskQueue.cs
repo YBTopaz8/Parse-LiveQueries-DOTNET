@@ -23,7 +23,7 @@ internal class SynchronousTaskQueue : ITaskQueue
         }
     }
 
-    public async Task EnqueueOnSuccess<TIn>(Func<Task<TIn>> taskFactory, Func<Task<TIn>, Task> onSuccess)
+    public async Task EnqueueOnSuccess<TIn>(Func<Task<TIn>> taskFactory, Func<Task<TIn>, Task> onSuccess, Action<Exception> onError)
     {
         Task<TIn> task;
 
