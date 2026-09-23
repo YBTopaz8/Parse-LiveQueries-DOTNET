@@ -208,10 +208,20 @@ public partial class Subscription<T> : Subscription where T : ParseObject
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;
+
         if (disposing)
         {
             try
             {
+                // 1. Tell listeners we unsubscribed BEFORE killing the stream
+                if (isConnected)
+                {
+                    isConnected = false;
+                    _unsubscribeStream.OnNext((ParseQuery<T>)QueryObj);
+                }
+
+
+                // 3. Complete and dispose all subjects
                 _internalDisposables.Dispose();
 
                 _eventStream.OnCompleted();
@@ -232,7 +242,9 @@ public partial class Subscription<T> : Subscription where T : ParseObject
             }
             catch { }
         }
-        base.Dispose(disposing);
+
+        // 4. Mark disposed so base.Dispose doesn't trigger duplicate unsubscription calls
+        _disposed = true;
     }
 
 
@@ -301,7 +313,7 @@ public partial class SubscriptionEvent<T> where T : ParseObject
 public abstract class Subscription : IDisposable
 {
 
-    private CancellationTokenSource _unsubscribeCts;
+    private CancellationTokenSource? _unsubscribeCts;
     private readonly Action<Subscription> _unsubscribeAction;
     /// <summary>
     /// Indicates whether the subscription is currently connected.
@@ -459,6 +471,10 @@ public abstract class Subscription : IDisposable
             {
                 try
                 {
+                    // 2. Cancel any pending timer
+                    _unsubscribeCts?.Cancel();
+                    _unsubscribeCts?.Dispose();
+                    _unsubscribeCts = null;
                     UnsubscribeInternal();
                 }
                 catch

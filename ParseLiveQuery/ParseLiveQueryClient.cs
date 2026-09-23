@@ -1,9 +1,11 @@
 ﻿using Parse.Abstractions.Infrastructure;
+using Parse.Abstractions.Internal;
 using Parse.Infrastructure;
 using Parse.Infrastructure.Data;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.WebSockets;
@@ -131,12 +133,22 @@ public class ParseLiveQueryClient :IAsyncDisposable
             existingSub.UnsubscribeNow();
         }
     }
-    public Subscription<T> Subscribe<T>(ParseQuery<T> query, string? SubscriptionName=null, [CallerMemberName] string callerName = "",
-    [CallerFilePath] string callerFile = "",
-    [CallerLineNumber] int callerLine = 0) where T : ParseObject
+    public Subscription<T> Subscribe<T>(ParseQuery<T> query, string? subscriptionName = null) where T : ParseObject
     {
+        return Subscribe(query, subscriptionName, string.Empty, string.Empty, 0);
+    }
 
-        if (!string.IsNullOrEmpty(SubscriptionName) && _namedSubscriptions.TryGetValue(SubscriptionName, out var existingSub))
+    [EditorBrowsable(EditorBrowsableState.Advanced)] 
+    public Subscription<T> Subscribe<T>(
+        ParseQuery<T> query,
+        string? subscriptionName,
+        [CallerMemberName] string callerName = "",
+        [CallerFilePath] string callerFile = "",
+        [CallerLineNumber] int callerLine = 0) where T : ParseObject
+    {
+  
+
+        if (!string.IsNullOrEmpty(subscriptionName) && _namedSubscriptions.TryGetValue(subscriptionName, out var existingSub))
         {
             existingSub.UnsubscribeNow();
         }
@@ -160,13 +172,15 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
         var requestId = Interlocked.Increment(ref _requestIdCount);
 
+        Debug.WriteLine($"[TRACE-SUBSCRIBE] Assigned RequestID: {requestId} for '{query.GetClassName()}' | Called by: {callerName}() at {System.IO.Path.GetFileName(callerFile)}:line {callerLine}");
+
         var subscription = _subscriptionFactory.CreateSubscription(requestId, query, unsubscribeAction);
-        if (!string.IsNullOrEmpty(SubscriptionName))
+        if (!string.IsNullOrEmpty(subscriptionName))
         {
-            subscription.Name = SubscriptionName;
+            subscription.Name = subscriptionName;
             
             _namedSubscriptions
-                .AddOrUpdate(SubscriptionName, subscription, 
+                .AddOrUpdate(subscriptionName, subscription, 
                 (name, oldSubscription) => subscription); 
             
         }
@@ -527,18 +541,20 @@ public class ParseLiveQueryClient :IAsyncDisposable
             var idd = jsonObject.TryGetValue("requestId", out var requestIdObj);
             if (idd)
             {
+                var reqId = Convert.ToInt32(requestIdObj);
 
 
-                var id = (int)requestIdObj!;
-                _subscriptions.TryGetValue(id, out var subscription);
+                _subscriptions.TryGetValue(reqId, out var subscription);
 
 
                 subscription?.DidSubscribe(subscription.QueryObj);
-                _subscribedSubject.OnNext((id, subscription));
+                _subscribedSubject.OnNext((reqId, subscription));
+                ctr++;
+                Debug.WriteLine(ctr);
             }
         }
     }
-
+    int ctr=0;
 
     private void HandleUnsubscribedEvent(Dictionary<string, object?>? jsonObject)
     {
