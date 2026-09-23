@@ -47,8 +47,8 @@ subscription.OnUpdate((original, updated) =>
 // Now returns an IDisposable token for clean lifecycle management
 IDisposable subscriptionToken = subscription.OnUpdate((original, updated) => 
 {
-    Console.WriteLine($"Original Name: {original?.Get<string>("name")}");
-    Console.WriteLine($"New Name: {updated?.Get<string>("name")}");
+    Console.WriteLine($"Original Name: {original?.Name}");
+    Console.WriteLine($"New Name: {updated?.Name}");
 });
 
 // Detach whenever the page/viewmodel is destroyed:

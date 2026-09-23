@@ -536,25 +536,33 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
     private void HandleSubscribedEvent(Dictionary<string, object?>? jsonObject)
     {
-        if (jsonObject is not null)
+        try
         {
-            var idd = jsonObject.TryGetValue("requestId", out var requestIdObj);
-            if (idd)
+
+            if (jsonObject is not null)
             {
-                var reqId = Convert.ToInt32(requestIdObj);
+                var idd = jsonObject.TryGetValue("requestId", out var requestIdObj);
+                if (idd)
+                {
+                    var reqId = Convert.ToInt32(requestIdObj);
 
 
-                _subscriptions.TryGetValue(reqId, out var subscription);
+                    _subscriptions.TryGetValue(reqId, out var subscription);
 
 
-                subscription?.DidSubscribe(subscription.QueryObj);
-                _subscribedSubject.OnNext((reqId, subscription));
-                ctr++;
-                Debug.WriteLine(ctr);
+                    subscription?.DidSubscribe(subscription.QueryObj);
+                    _subscribedSubject.OnNext((reqId, subscription));
+
+                }
             }
         }
+        catch (Exception ex)
+        {
+
+            _errorSubject.OnNext(new LiveQueryException.UnknownException("Error handling subscribe event", ex));
+        }
     }
-    int ctr=0;
+
 
     private void HandleUnsubscribedEvent(Dictionary<string, object?>? jsonObject)
     {
