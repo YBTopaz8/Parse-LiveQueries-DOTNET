@@ -9,7 +9,7 @@ namespace Parse.LiveQuery;
 /// <summary>
 /// Interface for a WebSocket client supporting state changes, messages, and errors as observables.
 /// </summary>
-public interface IWebSocketClient
+public interface IWebSocketClient :IDisposable
 {
     Task OpenAsync(CancellationToken cancellationToken = default); // Added CancellationToken
     Task CloseAsync(WebSocketCloseStatus closeStatus = WebSocketCloseStatus.NormalClosure, string statusDescription = "Client requested close", CancellationToken cancellationToken = default); // Added CancellationToken and defaults

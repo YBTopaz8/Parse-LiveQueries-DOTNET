@@ -15,12 +15,12 @@ internal class TaskQueueWrapper : ITaskQueue
         {
             taskStart();
             await Task.CompletedTask;
-        }, CancellationToken.None);
+        }, CancellationToken.None).ConfigureAwait(false);
     }
 
    
 
-    public Task EnqueueOnSuccess<TIn>(Func<Task<TIn>> taskFactory, Func<Task<TIn>, Task> onSuccess)
+    public Task EnqueueOnSuccess<TIn>(Func<Task<TIn>> taskFactory, Func<Task<TIn>, Task> onSuccess, Action<Exception> onError)
     {
         return _underlying.Enqueue(async cancellationToken =>
         {
@@ -34,9 +34,9 @@ internal class TaskQueueWrapper : ITaskQueue
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException("Task failed in queue.", ex);
                
 
+                onError.Invoke(ex);
             }
         }, CancellationToken.None);
     }

@@ -86,14 +86,14 @@ public class WebSocketClient : IWebSocketClient, IDisposable
     public IObservable<ReadOnlyMemory<byte>> BinaryMessages => throw new NotImplementedException();
 
 
-    int openCtr = 0;
+
 
     public async Task OpenAsync(CancellationToken cancellationToken = default)
     {
         if (_disposed)
             throw new ObjectDisposedException(nameof(WebSocketClient));
-        openCtr++;
-        Debug.WriteLine(openCtr);
+      
+
 
         CancellationTokenSource? linkedCts = null;
         try
@@ -129,13 +129,13 @@ public class WebSocketClient : IWebSocketClient, IDisposable
         {
             
             // If cancellation came from the external token, ensure clean state
-            await HandleConnectionClosedOrFailedAsync("Open cancelled by caller." +oCEx.Message);
+            await HandleConnectionClosedOrFailedAsync("Open cancelled by caller." +oCEx.Message).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             
             ReportError(ex);
-            await HandleConnectionClosedOrFailedAsync($"Open failed: {ex.Message}");
+            await HandleConnectionClosedOrFailedAsync($"Open failed: {ex.Message}").ConfigureAwait(false);
         }
         finally
         {
@@ -172,8 +172,8 @@ public class WebSocketClient : IWebSocketClient, IDisposable
 
             
             var buffer = Encoding.UTF8.GetBytes(message);
-            await currentWebSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, linkedCts.Token);
-            
+            await currentWebSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, linkedCts.Token).ConfigureAwait(false);
+
         }
         catch (OperationCanceledException oCEx) when (cancellationToken.IsCancellationRequested || _internalCts?.IsCancellationRequested == true)
         {
@@ -185,7 +185,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
             
             ReportError(ex);
             
-            _ = HandleConnectionClosedOrFailedAsync($"Send failed: {ex.Message}");
+            _ = HandleConnectionClosedOrFailedAsync($"Send failed: {ex.Message}").ConfigureAwait(false); 
         }
     }
 
@@ -210,7 +210,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
                 {
                     
                     var bufferSegment = new Memory<byte>(buffer);
-                    receiveResult = await _webSocket.ReceiveAsync(bufferSegment, loopCancellationToken);
+                    receiveResult = await _webSocket.ReceiveAsync(bufferSegment, loopCancellationToken).ConfigureAwait(false);
 
                     if (loopCancellationToken.IsCancellationRequested)
                         break; 
@@ -221,14 +221,14 @@ public class WebSocketClient : IWebSocketClient, IDisposable
                         case WebSocketMessageType.Text:
                         case WebSocketMessageType.Binary:
                             
-                            await messageStream.WriteAsync(bufferSegment[..receiveResult.Count], loopCancellationToken);
+                            await messageStream.WriteAsync(bufferSegment[..receiveResult.Count], loopCancellationToken).ConfigureAwait(false);
                             break;
 
                         case WebSocketMessageType.Close:
 
                             var closeStatus = _webSocket.CloseStatus;
                             var statusDescription = _webSocket.CloseStatusDescription;
-                            await HandleConnectionClosedOrFailedAsync("Server initiated close."); // Pass details
+                            await HandleConnectionClosedOrFailedAsync("Server initiated close.").ConfigureAwait(false);  // Pass details
                             return;
 
                         default:
@@ -250,7 +250,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
                     var message = Encoding.UTF8.GetString(messageStream.GetBuffer(), 0, (int)messageStream.Length);
                     
                     _messages.OnNext(message); 
-                    await _webSocketClientCallback.OnMessageAsync(message); 
+                    await _webSocketClientCallback.OnMessageAsync(message).ConfigureAwait(false);  
                 }
                 else if (receiveResult.MessageType == WebSocketMessageType.Binary)
                 {
@@ -272,14 +272,14 @@ public class WebSocketClient : IWebSocketClient, IDisposable
         {
             
             ReportError(ex);
-            await HandleConnectionClosedOrFailedAsync("Connection closed prematurely.");
+            await HandleConnectionClosedOrFailedAsync("Connection closed prematurely.").ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             
             ReportError(ex);
             
-            await HandleConnectionClosedOrFailedAsync($"Receive loop error: {ex.Message}");
+            await HandleConnectionClosedOrFailedAsync($"Receive loop error: {ex.Message}").ConfigureAwait(false);
         }
         finally
         {
@@ -452,7 +452,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
 
 
 
-        await CloseInternalAsync(WebSocketCloseStatus.NormalClosure, reason, false, CancellationToken.None);
+        await CloseInternalAsync(WebSocketCloseStatus.NormalClosure, reason, false, CancellationToken.None).ConfigureAwait(false);
         
         if (State != WebSocketState.Closed)
         {
@@ -513,7 +513,7 @@ public class WebSocketClient : IWebSocketClient, IDisposable
                 
                 try
                 {
-                    await Task.Delay(delayMs, combinedToken);
+                    await Task.Delay(delayMs, combinedToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException oCEx)
                 {

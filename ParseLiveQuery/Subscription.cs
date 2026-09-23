@@ -13,6 +13,7 @@ using Parse.Abstractions.Platform.Objects;
 
 using System;
 using System.Diagnostics;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading;
@@ -28,7 +29,7 @@ namespace Parse.LiveQuery;
 /// a ParseQuery of type T, where T is a ParseObject.
 /// </summary>
 /// <typeparam name="T">The type of ParseObject this subscription is for.</typeparam>
-public class Subscription<T> : Subscription where T : ParseObject
+public partial class Subscription<T> : Subscription where T : ParseObject
 {
 
     private readonly Subject<(T created, ParseQuery<T> query)> _createSubject = new();
@@ -44,7 +45,7 @@ public class Subscription<T> : Subscription where T : ParseObject
     private readonly ReplaySubject<ParseQuery<T>> _unsubscribeStream = new(1);
 
 
-
+    private readonly CompositeDisposable _internalDisposables = new();
     /// <summary>
     /// Initializes a new instance of the <see cref="Subscription{T}"/> class.
     /// </summary>
@@ -56,11 +57,13 @@ public class Subscription<T> : Subscription where T : ParseObject
         RequestID = requestId;
         QueryObj = query;
 
-        this.Events.Where(e => e.EventType == Event.Create).Subscribe(e => _createSubject.OnNext((e.Object, e.Query)));
-        this.Events.Where(e => e.EventType == Event.Update).Subscribe(e => _updateSubject.OnNext((e.Object, e.Query))); 
-        this.Events.Where(e => e.EventType == Event.Delete).Subscribe(e => _deleteSubject.OnNext((e.Object, e.Query)));
-        this.Events.Where(e => e.EventType == Event.Enter).Subscribe(e => _enterSubject.OnNext((e.Object, e.Query)));
-        this.Events.Where(e => e.EventType == Event.Leave).Subscribe(e => _leaveSubject.OnNext((e.Object, e.Query)));
+     
+
+        _internalDisposables.Add(this.Events.Where(e => e.EventType == Event.Create).Subscribe(e => _createSubject.OnNext((e.Object, e.Query))));
+        _internalDisposables.Add(this.Events.Where(e => e.EventType == Event.Update).Subscribe(e => _updateSubject.OnNext((e.Object, e.Query))));
+        _internalDisposables.Add(this.Events.Where(e => e.EventType == Event.Delete).Subscribe(e => _deleteSubject.OnNext((e.Object, e.Query))));
+        _internalDisposables.Add(this.Events.Where(e => e.EventType == Event.Enter).Subscribe(e => _enterSubject.OnNext((e.Object, e.Query))));
+        _internalDisposables.Add(this.Events.Where(e => e.EventType == Event.Leave).Subscribe(e => _leaveSubject.OnNext((e.Object, e.Query))));
     }
 
     // Observable streams for LINQ usage.  These provide a fluent interface for working with events.
@@ -86,11 +89,11 @@ public class Subscription<T> : Subscription where T : ParseObject
     /// </summary>
     internal override string Name { get; set; }
 
-    internal event LiveQueryGeneralHandler<T> OnCreate;
-    internal event LiveQueryUpdateHandler<T> OnUpdate; 
-    internal event LiveQueryGeneralHandler<T> OnDelete;
-    internal event LiveQueryGeneralHandler<T> OnEnter;
-    internal event LiveQueryGeneralHandler<T> OnLeave;
+    internal event LiveQueryGeneralHandler<T?> OnCreate;
+    internal event LiveQueryUpdateHandler<T?> OnUpdate; 
+    internal event LiveQueryGeneralHandler<T?> OnDelete;
+    internal event LiveQueryGeneralHandler<T?> OnEnter;
+    internal event LiveQueryGeneralHandler<T?> OnLeave;
 
     /// <summary>
     /// Handles an incoming event from the Live Query server.
@@ -103,7 +106,7 @@ public class Subscription<T> : Subscription where T : ParseObject
     internal override void DidReceive(object queryObj, Event objEvent, ParseObject obj, ParseObject? OriginalObject=null)
     {
         if (_disposed) return;
-        T typedObj = obj as T;
+        T? typedObj = obj as T;
         if (typedObj == null && obj != null)
         {
             throw new InvalidOperationException(
@@ -113,7 +116,7 @@ public class Subscription<T> : Subscription where T : ParseObject
             );
         }
 
-        T typedOG = null;
+        T? typedOG = null;
         if(OriginalObject is not null)
         {
             typedOG = (T)OriginalObject;
@@ -144,8 +147,8 @@ public class Subscription<T> : Subscription where T : ParseObject
         if (!_disposed)
         {
             try 
-            { 
-                _eventStream.OnNext(new SubscriptionEvent<T>(query, objEvent, typedObj)); 
+            {
+                _eventStream.OnNext(new SubscriptionEvent<T>(query, objEvent, typedObj, typedOG));
             } catch (ObjectDisposedException objDispEx) 
             {
                 Debug.WriteLine(objDispEx.Message);
@@ -209,6 +212,8 @@ public class Subscription<T> : Subscription where T : ParseObject
         {
             try
             {
+                _internalDisposables.Dispose();
+
                 _eventStream.OnCompleted();
                 _errorStream.OnCompleted();
                 _subscribeStream.OnCompleted();
@@ -218,11 +223,14 @@ public class Subscription<T> : Subscription where T : ParseObject
                 _errorStream.Dispose();
                 _subscribeStream.Dispose();
                 _unsubscribeStream.Dispose();
-            }
-            catch
-            {
-            }
 
+                _createSubject.Dispose();
+                _updateSubject.Dispose();
+                _deleteSubject.Dispose();
+                _enterSubject.Dispose();
+                _leaveSubject.Dispose();
+            }
+            catch { }
         }
         base.Dispose(disposing);
     }
@@ -249,7 +257,7 @@ public class Subscription<T> : Subscription where T : ParseObject
 /// </summary>
 /// <typeparam name="T">The type of ParseObject associated with the event.</typeparam>
 
-public class SubscriptionEvent<T> where T : ParseObject
+public partial class SubscriptionEvent<T> where T : ParseObject
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="SubscriptionEvent{T}"/> class.
@@ -257,11 +265,13 @@ public class SubscriptionEvent<T> where T : ParseObject
     /// <param name="query">The ParseQuery associated with the event.</param>
     /// <param name="objEvent">The type of event.</param>
     /// <param name="obj">The ParseObject involved in the event.</param>
-    public SubscriptionEvent(ParseQuery<T> query, Subscription.Event objEvent, T obj)
+    /// <param name="originalObject">The original state of the ParseObject before the update occurred.</param>
+    public SubscriptionEvent(ParseQuery<T> query, Subscription.Event objEvent, T? obj, T? originalObject=null)
     {
         Query = query;
         EventType = objEvent;
         Object = obj;
+        OriginalObject = originalObject;
     }
 
     /// <summary>
@@ -275,7 +285,12 @@ public class SubscriptionEvent<T> where T : ParseObject
     /// <summary>
     /// Gets the ParseObject involved in the event.
     /// </summary>
-    public T Object { get; }
+    public T? Object { get; }
+
+    /// <summary>
+    /// Gets the original state of the ParseObject before the update occurred. (Will be null for Create/Delete/Enter/Leave).
+    /// </summary>
+    public T? OriginalObject { get; }
 }
 
 
@@ -318,7 +333,7 @@ public abstract class Subscription : IDisposable
     /// <param name="queryObj"></param>
     /// <param name="objEvent"></param>
     /// <param name="obj"></param>
-    internal abstract void DidReceive(object queryObj, Event objEvent, ParseObject objState, ParseObject? OriginalObject=null);
+    internal abstract void DidReceive(object queryObj, Event objEvent, ParseObject? objState, ParseObject? OriginalObject=null);
 
     /// <summary>
     /// Abstract method for handling errors.
@@ -461,38 +476,21 @@ public abstract class Subscription : IDisposable
 /// </summary>
 public static class SubscriptionExtensions
 {
-
-    public static void On<T>(this Subscription<T> subscription, Subscription.Event evt, LiveQueryGeneralHandler<T> handler) where T : ParseObject
+    public static IDisposable On<T>(this Subscription<T> subscription, Subscription.Event evt, LiveQueryGeneralHandler<T?> handler) where T : ParseObject
     {
-        switch (evt)
-        {
-            case Subscription.Event.Create:
-                subscription.OnCreate += handler;
-                break;
-            case Subscription.Event.Update:
-              
-                subscription.OnUpdate += (original,updated) => handler(updated);
-                break;
-            case Subscription.Event.Delete:
-                subscription.OnDelete += handler;
-                break;
-            case Subscription.Event.Enter:
-                subscription.OnEnter += handler;
-                break;
-            case Subscription.Event.Leave:
-                subscription.OnLeave += handler;
-                break;
-        }
+        return subscription.Events
+            .Where(e => e.EventType == evt)
+            .Subscribe(e => handler(e.Object));
     }
 
-   
-
-
-    public static void OnUpdate<T>(this Subscription<T> subscription, LiveQueryUpdateHandler<T> handler) where T : ParseObject
+    public static IDisposable OnUpdate<T>(this Subscription<T> subscription, LiveQueryUpdateHandler<T> handler) where T : ParseObject
     {
-            subscription.OnUpdate += handler;
-        
+        return subscription.Events
+            .Where(e => e.EventType == Subscription.Event.Update)
+            .Subscribe(e => handler(e.OriginalObject, e.Object));
     }
+
+
 
     /// <summary>
     /// Unsubscribes from the Live Query immediately.

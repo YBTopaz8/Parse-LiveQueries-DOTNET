@@ -31,7 +31,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
     private readonly ITaskQueue _taskQueue;
     private readonly ISubscriptionFactory _subscriptionFactory;
 
-    private IWebSocketClient _webSocketClient;
+    private IWebSocketClient? _webSocketClient;
     private int _requestIdCount = 0;
 
     private readonly ConcurrentDictionary<string, Subscription> _namedSubscriptions = new();
@@ -44,16 +44,16 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
     private readonly Subject<ParseLiveQueryClient> _connectedSubject = new();
     private readonly Subject<LiveQueryException> _errorSubject = new();
-    private readonly Subject<(int requestId, Subscription subscription)> _subscribedSubject = new();
-    private readonly Subject<(int requestId, Subscription subscription)> _unsubscribedSubject = new();
+    private readonly Subject<(int requestId, Subscription? subscription)> _subscribedSubject = new();
+    private readonly Subject<(int requestId, Subscription? subscription)> _unsubscribedSubject = new();
 
 
     private readonly Subject<LiveQueryConnectionState> _connectionStateSubject = new Subject<LiveQueryConnectionState>(); 
     public IObservable<LiveQueryConnectionState> OnConnectionStateChanged => _connectionStateSubject.AsObservable();
     public IObservable<ParseLiveQueryClient> OnConnected => _connectedSubject.AsObservable();
     public IObservable<LiveQueryException> OnError => _errorSubject.AsObservable();
-    public IObservable<(int requestId, Subscription subscription)> OnSubscribed => _subscribedSubject.AsObservable();
-    public IObservable<(int requestId, Subscription subscription)> OnUnsubscribed => _unsubscribedSubject.AsObservable();
+    public IObservable<(int requestId, Subscription? subscription)> OnSubscribed => _subscribedSubject.AsObservable();
+    public IObservable<(int requestId, Subscription? subscription)> OnUnsubscribed => _unsubscribedSubject.AsObservable();
 
 
     private IServiceHub? _parseClientInstance;
@@ -110,7 +110,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
             Scheme = serverUri.Scheme.Equals("https") ? "wss" : "ws"
         }.Uri;
     }
-    public Subscription GetSubscriptionByName(string subscriptionName)
+    public Subscription? GetSubscriptionByName(string subscriptionName)
     {
         _namedSubscriptions.TryGetValue(subscriptionName, out var subscription);
         return subscription; 
@@ -191,8 +191,8 @@ public class ParseLiveQueryClient :IAsyncDisposable
             {
                 if (ConnectionState == LiveQueryConnectionState.Disconnected || ConnectionState == LiveQueryConnectionState.Failed)
                 {
-
-                    _ = ReconnectAsync();
+                    SetConnectionState(LiveQueryConnectionState.Connecting);
+                    _ = ReconnectAsync().ConfigureAwait(false);
                     return;
                 }
                 return;
@@ -213,7 +213,7 @@ public class ParseLiveQueryClient :IAsyncDisposable
         if (!userInitiated)
         {
             SetConnectionState(LiveQueryConnectionState.Reconnecting);
-            _ = ReconnectAsync();
+            _ = ReconnectAsync().ConfigureAwait(false);
         }
     }
 
@@ -233,10 +233,13 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
             
             await SendUnsubscriptionAsync(subscription).ConfigureAwait(false);
-
-            if (_subscriptions.TryRemove(requestId, out _)&&!string.IsNullOrEmpty(subscription.Name))
+            if (_subscriptions.TryRemove(requestId, out _))
             {
-                _namedSubscriptions.TryRemove(subscription.Name, out _);
+                if (!string.IsNullOrEmpty(subscription.Name))
+                {
+                    _namedSubscriptions.TryRemove(subscription.Name, out _);
+                }
+                subscription.Dispose(); 
             }
         }
     }
@@ -263,6 +266,12 @@ public class ParseLiveQueryClient :IAsyncDisposable
         {
            
             await SendUnsubscriptionAsync(pair.Value).ConfigureAwait(false);
+            if (_subscriptions.TryRemove(pair.Key, out Subscription? sub))
+            {
+                if (!string.IsNullOrEmpty(sub.Name)) _namedSubscriptions.TryRemove(sub.Name, out _);
+                sub.Dispose(); 
+
+            }
         }
     }
 
@@ -271,7 +280,8 @@ public class ParseLiveQueryClient :IAsyncDisposable
     {
         if(_webSocketClient!=null)
         {
-            await _webSocketClient?.CloseAsync();
+            await _webSocketClient.CloseAsync().ConfigureAwait(false);
+            _webSocketClient.Dispose();
         }
         
         
@@ -286,25 +296,11 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
     public async Task DisconnectAsync()
     {
-        await _webSocketClient?.CloseAsync();
+        await _webSocketClient.CloseAsync().ConfigureAwait(false);
         _webSocketClient = null;
-
-        
-        
     }
 
 
-    private WebSocketClientState GetWebSocketState()
-    {
-        return _webSocketClient == null ? WebSocketClientState.None :
-            _webSocketClient.State switch
-            {
-                WebSocketState.Connecting => WebSocketClientState.Connecting,
-                WebSocketState.Open => WebSocketClientState.Connected,
-                WebSocketState.Closed or WebSocketState.Error => WebSocketClientState.Disconnected,
-                _ => WebSocketClientState.None
-            };
-    }
 
 
     private Task SendSubscriptionAsync(Subscription subscription)
@@ -328,6 +324,8 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
     private Task SendOperationWithSessionAsync(Func<string, IClientOperation> operationFunc)
     {
+        if (ParseClientInstance is null) throw new ArgumentNullException(nameof(ParseClientInstance));
+
         return _taskQueue.EnqueueOnSuccess<string>(
            
             () => ParseClientInstance.CurrentUserController.GetCurrentSessionTokenAsync(ParseClientInstance, CancellationToken.None),
@@ -335,9 +333,14 @@ public class ParseLiveQueryClient :IAsyncDisposable
             {
                 string sessionToken = await currentSessionTokenTask.ConfigureAwait(false);
                 await SendOperationAsync(operationFunc(sessionToken)).ConfigureAwait(false);
-            });
+            },
+            error =>
+            {
+                // Pipe session token retrieval errors into the global error stream
+                _errorSubject.OnNext(new LiveQueryException.UnknownException("Failed to get Session Token", error));
+            }
+        );
     }
-    
 
     private Task SendOperationAsync(IClientOperation operation)
     {  
@@ -364,15 +367,13 @@ public class ParseLiveQueryClient :IAsyncDisposable
             {
                 // Send the queued operation. We add a small delay to avoid overwhelming the server on a fresh connection.
                 await SendOperationAsync(operation).ConfigureAwait(false);
-                await Task.Delay(100); // Small buffer between queued messages
-            }
-            catch (ParseFailureException ex)
-            {
-              throw  new ParseFailureException(ex.Code,ex.Message,ex);
             }
             catch (Exception ex)
             {
-                throw new Exception(ex.Message);  // Depending on desired robustness, you could re-queue the failed operation.
+                _operationQueue.Enqueue(operation);
+                if (ex is ParseFailureException parseEx)
+                    throw new ParseFailureException(parseEx.Code, parseEx.Message, parseEx);
+                break;
             }
         }
     }
@@ -396,53 +397,28 @@ public class ParseLiveQueryClient :IAsyncDisposable
 
         return element.GetDouble();
     }
-    private static Dictionary<string, object> ConvertJsonElements(Dictionary<string, JsonElement> jsonElementDict)
-    {
-        var result = new Dictionary<string, object>();
 
-        foreach (var kvp in jsonElementDict)
-        {
-            JsonElement element = kvp.Value;
-
-            object value = element.ValueKind switch
-            {
-                JsonValueKind.String => element.GetString(),
-                JsonValueKind.Number => ConvertJsonNumber(element),
-                JsonValueKind.True => true,
-                JsonValueKind.False => false,
-                JsonValueKind.Null => null,
-                
-                _ => element
-            };
-
-            result[kvp.Key] = value;
-        }
-
-        return result;
-    }
 
     private async Task ParseMessage(string message)
     {
         try
         {
 
-            //var jsonNode = JsonNode.Parse(message);
-            //if (jsonNode is not JsonObject jsonObject) return;
+            using var document = JsonDocument.Parse(message);
+            var root = document.RootElement;
 
-            var jsonElementDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(message);
-
-            if (jsonElementDict == null || !jsonElementDict.ContainsKey("op"))
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("op", out var opElement))
             {
                 throw new LiveQueryException.InvalidResponseException("Message does not contain a valid 'op' field.");
             }
 
-            var jsonObject = ConvertJsonElements(jsonElementDict);
-            string rawOperation = (jsonObject["op"] as string)!;
+            string? rawOperation = opElement.GetString();
             if (string.IsNullOrEmpty(rawOperation))
             {
                 throw new LiveQueryException.InvalidResponseException("'op' field is null or empty.");
             }
-            
+            var jsonObject = JsonElementToDictionary(root);
+
             switch (rawOperation)
             {
                 case "connected":
@@ -485,6 +461,8 @@ public class ParseLiveQueryClient :IAsyncDisposable
                 default:
                     throw new LiveQueryException.InvalidResponseException($"Unexpected operation: {rawOperation}");
             }
+
+
         }
         catch (Exception e) when (e is not LiveQueryException)
         {
@@ -493,41 +471,46 @@ public class ParseLiveQueryClient :IAsyncDisposable
     }
 
 
-    private void HandleObjectEvent(Subscription.Event subscriptionEvent, Dictionary<string, object> jsonObject)
+    private void HandleObjectEvent(Subscription.Event subscriptionEvent, Dictionary<string, object?>? jsonObject)
     {
+        if(ParseClientInstance is null)
+            throw new ArgumentNullException(nameof(ParseClientInstance));
         try
         {
-            int requestId = Convert.ToInt32(jsonObject["requestId"]);
-
-
-
-            if (_subscriptions.TryGetValue(requestId, out var subscription))
+            if (jsonObject is not null)
             {
-
-
-                var jsonElement = (JsonElement)jsonObject["object"];
+                int requestId = Convert.ToInt32(jsonObject["requestId"]);
 
 
 
-                var objectData = JsonElementToDictionary(jsonElement);
+                if (_subscriptions.TryGetValue(requestId, out var subscription))
+                {
 
-                var obj = ParseClientInstance.Decoder.Decode(objectData, ParseClientInstance);
 
-                if (jsonObject.TryGetValue("original", out var message))
-                
-                { 
-                    var originalObjectData = JsonElementToDictionary((JsonElement)message);
+                    var jsonElement = (JsonElement?)jsonObject["object"];
 
-                    var originalParseObj = ParseClientInstance.Decoder.Decode(originalObjectData, ParseClientInstance);
 
-                    subscription.DidReceive(subscription.QueryObj, subscriptionEvent, obj as ParseObject, originalParseObj as ParseObject);
 
-                    return;
-                }
+                    var objectData = JsonElementToDictionary(jsonElement);
+
+                    var obj = ParseClientInstance.Decoder.Decode(objectData, ParseClientInstance);
+
+                    if (jsonObject.TryGetValue("original", out var message))
+
+                    {
+                        var originalObjectData = JsonElementToDictionary((JsonElement?)message);
+
+                        var originalParseObj = ParseClientInstance.Decoder.Decode(originalObjectData, ParseClientInstance);
+
+                        subscription.DidReceive(subscription.QueryObj, subscriptionEvent, obj as ParseObject, originalParseObj as ParseObject);
+
+                        return;
+                    }
 
 
                     subscription.DidReceive(subscription.QueryObj, subscriptionEvent, obj as ParseObject);
-                
+
+                }
             }
         }
         catch (Exception ex)
@@ -537,60 +520,78 @@ public class ParseLiveQueryClient :IAsyncDisposable
         }
     }
 
-    private void HandleSubscribedEvent(Dictionary<string, object> jsonObject)
+    private void HandleSubscribedEvent(Dictionary<string, object?>? jsonObject)
     {
-        var idd = jsonObject.TryGetValue("requestId", out var requestIdObj);
-        var id = (int)requestIdObj;
-        _subscriptions.TryGetValue(id , out var subscription);
+        if (jsonObject is not null)
+        {
+            var idd = jsonObject.TryGetValue("requestId", out var requestIdObj);
+            if (idd)
+            {
 
 
-            subscription.DidSubscribe(subscription.QueryObj);
-            _subscribedSubject.OnNext((id, subscription));
-        
+                var id = (int)requestIdObj!;
+                _subscriptions.TryGetValue(id, out var subscription);
+
+
+                subscription?.DidSubscribe(subscription.QueryObj);
+                _subscribedSubject.OnNext((id, subscription));
+            }
+        }
     }
 
 
-    private void HandleUnsubscribedEvent(Dictionary<string, object> jsonObject)
+    private void HandleUnsubscribedEvent(Dictionary<string, object?>? jsonObject)
     {
-        if (jsonObject.TryGetValue("requestId", out var requestIdObj) 
+        if (jsonObject is not null)
+        {
+            if (jsonObject.TryGetValue("requestId", out var requestIdObj) 
             &&
             requestIdObj is int requestId 
             &&
             _subscriptions.TryRemove(requestId, out var subscription))
-        {
-            if (subscription != null && !string.IsNullOrEmpty(subscription.Name))
             {
-                _namedSubscriptions.TryRemove(subscription.Name, out _);
+                if (subscription != null && !string.IsNullOrEmpty(subscription.Name))
+                {
+                    _namedSubscriptions.TryRemove(subscription.Name, out _);
+                }
+                subscription?.DidUnsubscribe(subscription.QueryObj);
+                _unsubscribedSubject.OnNext((requestId, subscription));
             }
-            subscription.DidUnsubscribe(subscription.QueryObj);
-            _unsubscribedSubject.OnNext((requestId, subscription));
         }
     }
 
 
-    private Dictionary<string, object> JsonElementToDictionary(JsonElement element)
+    private Dictionary<string, object?> JsonElementToDictionary(JsonElement? element)
     {
-        if (element.ValueKind != JsonValueKind.Object)
+        if (element is not null)
         {
-            throw new ArgumentException("Expected JsonElement to be an object.");
-        }
+            var elt = element.Value;
+            if (elt.ValueKind != JsonValueKind.Object)
+            {
+                throw new ArgumentException("Expected JsonElement to be an object.");
+            }
 
-        var result = new Dictionary<string, object>();
-        foreach (var property in element.EnumerateObject())
-        {
-            result[property.Name] = JsonElementToObject(property.Value);
+            var result = new Dictionary<string, object?>();
+            foreach (var property in elt.EnumerateObject())
+            {
+                result[property.Name] = JsonElementToObject(property.Value);
+            }
+
+            return result;
         }
-        return result;
+        return new Dictionary<string, object?>();
     }
 
-    private object JsonElementToObject(JsonElement element)
+    private object? JsonElementToObject(JsonElement element)
     {
         return element.ValueKind switch
         {
             JsonValueKind.Object => JsonElementToDictionary(element),
             JsonValueKind.Array => JsonArrayToObjectList(element),
             JsonValueKind.String => element.GetString(),
-            JsonValueKind.Number => element.TryGetInt64(out long l) ? l : element.GetDouble(),
+            JsonValueKind.Number =>
+            element.TryGetInt64(out long l) ? l :
+            element.TryGetDouble(out double d) ? d : 0,
             JsonValueKind.True => true,
             JsonValueKind.False => false,
             JsonValueKind.Null => null,
@@ -599,9 +600,9 @@ public class ParseLiveQueryClient :IAsyncDisposable
     }
 
 
-    private List<object> JsonArrayToObjectList(JsonElement element)
+    private List<object?>? JsonArrayToObjectList(JsonElement element)
     {
-        var list = new List<object>();
+        var list = new List<object?>();
         foreach (var arrayElement in element.EnumerateArray())
         {
             list.Add(JsonElementToObject(arrayElement));
@@ -610,29 +611,32 @@ public class ParseLiveQueryClient :IAsyncDisposable
     }
 
 
-    private void HandleErrorEvent(Dictionary<string, object> jsonObject)
+    private void HandleErrorEvent(Dictionary<string, object?>? jsonObject)
     {
-        if (jsonObject.TryGetValue("requestId", out var requestIdObj) && requestIdObj is int requestId)
+        if (jsonObject is not null)
         {
-
-            if (_subscriptions.TryGetValue(requestId, out var subscription))
+            if (jsonObject.TryGetValue("requestId", out var requestIdObj) && requestIdObj is int requestId)
             {
 
+                if (_subscriptions.TryGetValue(requestId, out var subscription))
+                {
+
+                    int code = Convert.ToInt32(jsonObject["code"]);
+                    string? error = (string?)jsonObject["error"];
+                    bool? reconnect = (bool?)jsonObject["reconnect"];
+                    LiveQueryException exception = new LiveQueryException.ServerReportedException(code, error, reconnect);
+                    subscription?.DidEncounter(subscription?.QueryObj, exception);
+                    _errorSubject.OnNext(exception);
+                }
+            }
+            else
+            {
                 int code = Convert.ToInt32(jsonObject["code"]);
-                string error = (string)jsonObject["error"];
-                bool reconnect = (bool)jsonObject["reconnect"];
+                string? error = (string?)jsonObject["error"];
+                bool? reconnect = (bool?)jsonObject["reconnect"];
                 LiveQueryException exception = new LiveQueryException.ServerReportedException(code, error, reconnect);
-                subscription.DidEncounter(subscription.QueryObj, exception);
                 _errorSubject.OnNext(exception);
             }
-        }
-        else
-        {
-            int code = Convert.ToInt32(jsonObject["code"]);
-            string error = (string)jsonObject["error"];
-            bool reconnect = (bool)jsonObject["reconnect"];
-            LiveQueryException exception = new LiveQueryException.ServerReportedException(code, error, reconnect);
-            _errorSubject.OnNext(exception);
         }
     }
 
@@ -641,41 +645,6 @@ public class ParseLiveQueryClient :IAsyncDisposable
         _taskQueue.Enqueue(() => _errorSubject.OnNext(new LiveQueryException.UnknownException("Socket error", exception)));
     }
  
-
-    protected virtual async Task Dispose(bool disposing)
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        if (disposing)
-        {
-            
-            await DisconnectAsync();
-            await RemoveAllSubscriptions();
-
-            _connectedSubject.Dispose();
-            _disconnectedSubject.Dispose();
-            _errorSubject.Dispose();
-            _subscribedSubject.Dispose();
-            _unsubscribedSubject.Dispose();
-
-            if(_webSocketClient is not null)
-            {
-
-            
-            await _webSocketClient?.CloseAsync();
-
-            }
-            _subscriptions.Clear();
-            _namedSubscriptions.Clear();
-        }
-
-        
-
-        _disposed = true;
-    }
 
     private void ThrowIfDisposed()
     {
@@ -794,15 +763,60 @@ public class ParseLiveQueryClient :IAsyncDisposable
         _clientState = ClientState.Stopped;
         
         _operationQueue.Clear(); // Clear any pending operations
-        await DisconnectAsync();
+        await DisconnectAsync().ConfigureAwait(false);
     }
-   
     public async ValueTask DisposeAsync()
     {
-        await Dispose(true);
+        await DisposeAsyncCore().ConfigureAwait(false);
+        Dispose(disposing: false);
         GC.SuppressFinalize(this);
     }
 
+    protected virtual async ValueTask DisposeAsyncCore()
+    {
+        if (_disposed) return;
+
+        await DisconnectAsync().ConfigureAwait(false);
+        await RemoveAllSubscriptions().ConfigureAwait(false);
+
+        if (_webSocketClient is IDisposable disposableWs)
+        {
+            disposableWs.Dispose();
+        }
+    }
+
+    public void Dispose()
+    {
+
+        DisposeAsyncCore().AsTask().GetAwaiter().GetResult();
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+
+        if (disposing)
+        {
+            _connectedSubject.Dispose();
+            _disconnectedSubject.Dispose();
+            _errorSubject.Dispose();
+            _subscribedSubject.Dispose();
+            _unsubscribedSubject.Dispose();
+            _connectionStateSubject.Dispose(); //
+
+            foreach (var sub in _subscriptions.Values)
+            {
+                sub.Dispose();
+            }
+
+            _subscriptions.Clear();
+            _namedSubscriptions.Clear();
+        }
+
+        _disposed = true;
+    }
     private ClientState _clientState = ClientState.Stopped;
     private enum ClientState { Stopped, Started, Disposed }
 }

@@ -8,7 +8,7 @@ namespace Parse.LiveQuery;
 internal interface ITaskQueue
 {
     Task Enqueue(Action taskStart);
-    Task EnqueueOnSuccess<TIn>(Func<Task<TIn>> taskFactory, Func<Task<TIn>, Task> onSuccess);
+    Task EnqueueOnSuccess<TIn>(Func<Task<TIn>> taskFactory, Func<Task<TIn>, Task> onSuccess, Action<Exception> onError);
     Task EnqueueOnError(Task task, Action<Exception> onError);
 }
     

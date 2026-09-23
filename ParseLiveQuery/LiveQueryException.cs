@@ -55,7 +55,7 @@ public abstract class LiveQueryException : Exception {
     /// </summary>
     public class ServerReportedException : LiveQueryException {
 
-        internal ServerReportedException(int code, string error, bool reconnect) :
+        internal ServerReportedException(int code, string? error, bool? reconnect) :
             base($"Live Queries Server reported error; code {code}, error: {error}, reconnect: {reconnect}") {
             Code = code;
             Error = error;
@@ -64,9 +64,9 @@ public abstract class LiveQueryException : Exception {
 
         public int Code { get; }
 
-        public string Error { get; }
+        public string? Error { get; }
 
-        public bool IsReconnect { get; }
+        public bool? IsReconnect { get; }
 
     }
 
